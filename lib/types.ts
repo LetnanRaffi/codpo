@@ -47,3 +47,25 @@ export interface MockUser {
   avatar_url: string | null;
   mode: "buyer" | "seller";
 }
+
+export type MessageType =
+  "text" | "image" | "system" | "location" | "cod_action";
+
+export interface Message {
+  id: string;
+  sender_id: string;
+  type: MessageType;
+  body: string;
+  image_url?: string | null;
+  cod_status?: "requested" | "accepted" | "rejected";
+  created_at: string;
+}
+
+export interface Conversation {
+  id: string;
+  listing_id: string;
+  participant_id: string;
+  last_message: string;
+  unread_count: number;
+  updated_at: string;
+}
