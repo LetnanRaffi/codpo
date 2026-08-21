@@ -1,0 +1,58 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+import { CATEGORIES } from "@/lib/mock/data";
+import { cn } from "@/lib/utils";
+
+function CategoryLink({
+  href,
+  active,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "shrink-0 rounded-full px-3.5 py-1.5 text-sm whitespace-nowrap transition-colors",
+        active
+          ? "bg-secondary font-semibold text-foreground"
+          : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+      )}
+    >
+      {children}
+    </Link>
+  );
+}
+
+export function CategoryNav() {
+  const pathname = usePathname();
+
+  return (
+    <nav
+      aria-label="Kategori"
+      className="hidden border-b bg-background md:block"
+    >
+      <div className="mx-auto flex w-full max-w-7xl [scrollbar-width:none] items-center gap-1 overflow-x-auto px-4 py-2 [&::-webkit-scrollbar]:hidden">
+        <CategoryLink href="/" active={pathname === "/"}>
+          Semua
+        </CategoryLink>
+        {CATEGORIES.map((category) => (
+          <CategoryLink
+            key={category.slug}
+            href={`/category/${category.slug}`}
+            active={pathname === `/category/${category.slug}`}
+          >
+            {category.name}
+          </CategoryLink>
+        ))}
+      </div>
+    </nav>
+  );
+}
