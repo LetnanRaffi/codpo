@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
-import { Big_Shoulders, IBM_Plex_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import {
+  Big_Shoulders,
+  IBM_Plex_Mono,
+  Plus_Jakarta_Sans,
+} from "next/font/google";
 import { MockAuthProvider } from "@/components/providers/mock-auth-provider";
+import { RadiusProvider } from "@/components/providers/radius-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -45,7 +50,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           enableSystem={false}
           disableTransitionOnChange
         >
-          <MockAuthProvider>{children}</MockAuthProvider>
+          <MockAuthProvider>
+            <RadiusProvider>{children}</RadiusProvider>
+          </MockAuthProvider>
         </ThemeProvider>
       </body>
     </html>

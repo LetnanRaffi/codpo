@@ -3,6 +3,7 @@
 import { Check, MapPin } from "lucide-react";
 import { useState } from "react";
 
+import { useRadius } from "@/components/providers/radius-provider";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -10,10 +11,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import { DEFAULT_RADIUS_KM, RADIUS_OPTIONS_KM } from "@/lib/mock/data";
+import { RADIUS_OPTIONS_KM } from "@/lib/mock/data";
 
 export function LocationPicker() {
-  const [radius, setRadius] = useState<number>(DEFAULT_RADIUS_KM);
+  const { radiusKm, setRadiusKm } = useRadius();
   const [open, setOpen] = useState(false);
 
   return (
@@ -23,11 +24,11 @@ export function LocationPicker() {
           variant="outline"
           size="sm"
           className="shrink-0 gap-1.5 rounded-full font-mono text-xs"
-          aria-label={`Lokasi Bekasi Utara, radius ${radius} km — ubah radius`}
+          aria-label={`Lokasi Bekasi Utara, radius ${radiusKm} km — ubah radius`}
         >
           <MapPin className="size-3.5 text-bu-red" />
           <span className="hidden sm:inline">Bekasi Utara</span>
-          <span>{radius} km</span>
+          <span>{radiusKm} km</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-60 p-2">
@@ -39,13 +40,13 @@ export function LocationPicker() {
             key={km}
             type="button"
             onClick={() => {
-              setRadius(km);
+              setRadiusKm(km);
               setOpen(false);
             }}
             className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent"
           >
             <span className="font-mono">{km} km</span>
-            {radius === km && (
+            {radiusKm === km && (
               <Check className="size-4 text-trust-green" aria-hidden />
             )}
           </button>
