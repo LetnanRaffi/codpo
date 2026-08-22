@@ -2,8 +2,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 const DOCS = {
-  terms: "tos-codpo-draft (copy 1).md",
-  privacy: "privacy-policy-codpo-draft (copy 1).md",
+  terms: "tos-codpo-draft.md",
+  privacy: "privacy-policy-codpo-draft.md",
 } as const;
 
 export type LegalDocKey = keyof typeof DOCS;

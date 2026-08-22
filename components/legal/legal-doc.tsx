@@ -74,9 +74,11 @@ export function LegalDoc({ content }: { content: string }) {
           p: P,
           li: LI,
           strong: ({ children }) => (
-            <strong className="font-bold">{children}</strong>
+            <strong className="font-bold">{withHighlights(children)}</strong>
           ),
-          em: ({ children }) => <em className="italic">{children}</em>,
+          em: ({ children }) => (
+            <em className="italic">{withHighlights(children)}</em>
+          ),
           hr: () => <hr className="my-8 border-border" />,
           ul: ({ children }) => (
             <ul className="list-disc space-y-2 pl-5">{children}</ul>
