@@ -108,7 +108,7 @@ export default function HomePage() {
         ))}
       </SectionRow>
 
-      <section className="space-y-3">
+      <section id="kategori" className="scroll-mt-20 space-y-3">
         <h2 className="font-display text-2xl font-bold tracking-wide uppercase">
           Kategori
         </h2>
