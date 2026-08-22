@@ -76,7 +76,7 @@ export function AccountMenu() {
               <Link href="/seller/dashboard">Dashboard Seller</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="#">
+              <Link href="/profile">
                 <UserRound /> Profil Saya
               </Link>
             </DropdownMenuItem>

@@ -14,6 +14,7 @@ import type { MockUser } from "@/lib/types";
 interface MockAuthState {
   user: MockUser | null;
   toggle: () => void;
+  setMode: (mode: "buyer" | "seller") => void;
 }
 
 const MockAuthContext = createContext<MockAuthState | null>(null);
@@ -21,7 +22,14 @@ const MockAuthContext = createContext<MockAuthState | null>(null);
 export function MockAuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<MockUser | null>(null);
   const toggle = useCallback(() => setUser((u) => (u ? null : MOCK_USER)), []);
-  const value = useMemo(() => ({ user, toggle }), [user, toggle]);
+  const setMode = useCallback(
+    (mode: "buyer" | "seller") => setUser((u) => (u ? { ...u, mode } : u)),
+    [],
+  );
+  const value = useMemo(
+    () => ({ user, toggle, setMode }),
+    [user, toggle, setMode],
+  );
 
   return (
     <MockAuthContext.Provider value={value}>

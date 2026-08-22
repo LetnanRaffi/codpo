@@ -165,7 +165,7 @@ export default async function ListingPage({ params }: ListingPageProps) {
           </p>
         </div>
         <Button variant="outline" size="sm" className="rounded-full" asChild>
-          <Link href="#">Lihat profil</Link>
+          <Link href={`/seller/${listing.seller.id}`}>Lihat profil</Link>
         </Button>
       </div>
 
