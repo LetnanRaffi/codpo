@@ -6,6 +6,7 @@ import { useState } from "react";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -18,6 +19,9 @@ const registerSchema = z
       .regex(/^08\d{8,11}$/, "Nomor HP format 08xxx, 10–13 digit"),
     password: z.string().min(8, "Password minimal 8 karakter"),
     confirm: z.string(),
+    agree: z.literal("on", {
+      message: "Kamu harus setuju Syarat & Ketentuan dulu",
+    }),
   })
   .refine((d) => d.password === d.confirm, {
     message: "Konfirmasi password gak sama",
@@ -27,6 +31,7 @@ const registerSchema = z
 export default function RegisterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [success, setSuccess] = useState(false);
+  const [agreed, setAgreed] = useState(false);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -124,9 +129,48 @@ export default function RegisterPage() {
           className: "rounded-lg",
         })}
 
+        <div className="space-y-1.5">
+          <Label className="flex items-start gap-2.5 text-sm leading-snug font-normal">
+            <Checkbox
+              name="agree"
+              checked={agreed}
+              onCheckedChange={(v) => setAgreed(v === true)}
+              aria-required
+              className="mt-0.5"
+            />
+            <span>
+              Saya menyetujui{" "}
+              <Link
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-bu-red underline underline-offset-2"
+              >
+                Syarat &amp; Ketentuan
+              </Link>{" "}
+              dan{" "}
+              <Link
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-bu-red underline underline-offset-2"
+              >
+                Kebijakan Privasi
+              </Link>
+              .
+            </span>
+          </Label>
+          {errors.agree && (
+            <p role="alert" className="text-xs font-medium text-bu-red-deep">
+              {errors.agree}
+            </p>
+          )}
+        </div>
+
         <Button
           type="submit"
           size="lg"
+          disabled={!agreed}
           className="w-full rounded-full font-bold"
         >
           Buat akun

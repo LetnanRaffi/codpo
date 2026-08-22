@@ -4,6 +4,7 @@ import {
   IBM_Plex_Mono,
   Plus_Jakarta_Sans,
 } from "next/font/google";
+import { SiteFooter } from "@/components/layout/site-footer";
 import { MockAuthProvider } from "@/components/providers/mock-auth-provider";
 import { RadiusProvider } from "@/components/providers/radius-provider";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           <MockAuthProvider>
             <RadiusProvider>{children}</RadiusProvider>
+            <SiteFooter />
           </MockAuthProvider>
         </ThemeProvider>
       </body>
