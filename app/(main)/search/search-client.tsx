@@ -246,7 +246,7 @@ function FilterPanel({
 export function SearchClient() {
   const searchParams = useSearchParams();
   const { radiusKm } = useRadius();
-  const [q] = useState(searchParams.get("q") ?? "");
+  const q = searchParams.get("q") ?? "";
   const [sort, setSort] = useState<SortKey>("recommended");
   const [filters, setFilters] = useState<Filters>({
     ...EMPTY_FILTERS,

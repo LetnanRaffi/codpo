@@ -163,7 +163,7 @@ export function ChatRoom({
   }
 
   return (
-    <div className="flex h-[calc(100dvh-9.75rem)] flex-col lg:h-full">
+    <div className="flex h-[calc(100dvh-8rem)] flex-col lg:h-full">
       {/* Header room */}
       <header className="flex items-center gap-3 border-b px-4 py-2.5">
         <Button

@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PriceStrike } from "@/components/price-strike";
 import { CONDITION_LABELS } from "@/lib/listing";
 import { CATEGORIES } from "@/lib/mock/data";
 import type { Condition } from "@/lib/types";
@@ -324,9 +325,9 @@ export function SellForm() {
             {buEffective !== null && Number(price) > 0 && (
               <p className="font-mono text-xs text-muted-foreground">
                 Preview:{" "}
-                <span className="line-through">
+                <PriceStrike>
                   {Number(price).toLocaleString("id-ID")}
-                </span>{" "}
+                </PriceStrike>{" "}
                 →{" "}
                 <span className="font-bold text-bu-red">
                   {buEffective.toLocaleString("id-ID")}
@@ -371,7 +372,7 @@ export function SellForm() {
         </p>
       )}
 
-      <div className="sticky bottom-14 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:backdrop-blur-none">
+      <div className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:backdrop-blur-none">
         <Button
           type="submit"
           size="lg"

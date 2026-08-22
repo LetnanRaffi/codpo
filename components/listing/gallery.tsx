@@ -49,6 +49,7 @@ export function Gallery({
               type="button"
               role="tab"
               aria-selected={i === active}
+              aria-label={`Lihat foto ${i + 1}`}
               onClick={() => setActive(i)}
               className={cn(
                 "relative size-16 shrink-0 overflow-hidden rounded-lg border-2 transition-colors",

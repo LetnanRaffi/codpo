@@ -83,7 +83,7 @@ export default async function ListingPage({ params }: ListingPageProps) {
 
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           {isBU && (
-            <PriceStrike className="text-base text-muted-foreground line-through decoration-transparent">
+            <PriceStrike className="text-base text-muted-foreground">
               {formatIDR(listing.price)}
             </PriceStrike>
           )}
@@ -238,7 +238,7 @@ export default async function ListingPage({ params }: ListingPageProps) {
       </div>
 
       {/* CTA mobile — nempel di atas bottom nav */}
-      <div className="fixed inset-x-0 bottom-14 z-40 border-t bg-background/95 px-4 py-2.5 backdrop-blur md:hidden">
+      <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 border-t bg-background/95 px-4 py-2.5 backdrop-blur md:hidden">
         <div className="mx-auto flex max-w-7xl gap-2">
           <CodRequestDialog
             listingTitle={listing.title}

@@ -14,7 +14,7 @@ export default function ChatLayout({
   const inRoom = /^\/chat\/.+/.test(pathname);
 
   return (
-    <div className="lg:flex lg:h-[calc(100dvh-9.5rem)] lg:overflow-hidden lg:rounded-xl lg:border">
+    <div className="lg:flex lg:h-[calc(100dvh-8.5rem)] lg:overflow-hidden lg:rounded-xl lg:border">
       {/* mobile: list tampil hanya di /chat — desktop: sidebar kiri permanen */}
       <ConversationList
         className={cn(
