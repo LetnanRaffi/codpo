@@ -39,14 +39,14 @@ returns table (
 )
 language sql
 stable
-security invoker set search_path = ''
+security invoker set search_path = public
 as $$
   with base as (
     select
       l.id, l.seller_id, l.title, l.description, l.condition,
       l.normal_price, l.bu_price, l.cod_available, l.area_label,
-      st_y(st_snaptogrid(l.geom::geometry, 0.001)) as approx_lat,
-      st_x(st_snaptogrid(l.geom::geometry, 0.001)) as approx_lng,
+      round(st_y(l.geom::public.geometry)::numeric, 3)::double precision as approx_lat,
+      round(st_x(l.geom::public.geometry)::numeric, 3)::double precision as approx_lng,
       l.boosted_until, l.created_at,
       c.slug as category_slug,
       pr.name as seller_name,
@@ -132,7 +132,7 @@ grant execute on function public.search_listings(text,text,public.listing_condit
 create or replace function public.expire_bu_listings()
 returns void
 language plpgsql
-security definer set search_path = ''
+security definer set search_path = public
 as $$
 begin
   update public.listings
@@ -152,7 +152,7 @@ select cron.schedule('expire-stale-sessions', '3 * * * *', 'select public.expire
 create or replace function public.notify_cod_reminders()
 returns void
 language plpgsql
-security definer set search_path = ''
+security definer set search_path = public
 as $$
 begin
   perform public.notify(s.buyer_id, 'cod_reminder', 'Ingat COD hari ini',

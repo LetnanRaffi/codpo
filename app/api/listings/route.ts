@@ -46,7 +46,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     rateLimit(req, "listing-create", 10, 60 * 60 * 1000);
-    await requireUser(req);
+    const user = await requireUser(req);
     const body = await parseBody(req, listingCreateSchema);
     const db = userClient(req);
 
@@ -61,6 +61,7 @@ export async function POST(req: Request) {
     const { data, error } = await db
       .from("listings")
       .insert({
+        seller_id: user.id,
         category_id: category.id,
         title: body.title,
         description: body.description,

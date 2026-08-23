@@ -11,26 +11,49 @@
 begin;
 
 create temp table __results (name text, pass boolean) on commit drop;
+grant select, insert on __results to public;
 
 create or replace function pg_temp.__assert(p_name text, p_ok boolean)
-returns void language plpgsql as $$
+returns void language plpgsql security definer as $$
 begin
   insert into __results values (p_name, p_ok);
   raise notice '% — %', case when p_ok then 'PASS' else 'FAIL ***' end, p_name;
 end $$;
 
-create or replace function pg_temp.__as(p_uid uuid)
-returns void language sql as $$
-  perform set_config('role', 'authenticated', true);
-  perform set_config('request.jwt.claims',
-    json_build_object('sub', p_uid::text, 'role', 'authenticated')::text, true);
+create or replace function pg_temp.__summary()
+returns table(passed bigint, failed bigint, failures json)
+language sql security definer as $$
+  select count(*) filter (where pass),
+         count(*) filter (where not pass),
+         coalesce(json_agg(name order by name) filter (where not pass), '[]'::json)
+    from __results;
 $$;
 
+create temp table __dbg(line text);
+grant select, insert on __dbg to public;
+create or replace function pg_temp.__log(p text)
+returns void language plpgsql security definer as $$
+begin
+  insert into __dbg values (p);
+end $$;
+
+create or replace function pg_temp.__as(p_uid uuid)
+returns void language plpgsql as $$
+begin
+  perform set_config('role', 'authenticated', true);
+  -- auth.uid() membaca DUA GUC — set keduanya biar deterministik
+  perform set_config('request.jwt.claim.sub', p_uid::text, true);
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', p_uid::text, 'role', 'authenticated')::text, true);
+end $$;
+
 create or replace function pg_temp.__as_anon()
-returns void language sql as $$
+returns void language plpgsql as $$
+begin
   perform set_config('role', 'anon', true);
+  perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('request.jwt.claims', '', true);
-$$;
+end $$;
 
 do $$
 declare
@@ -118,9 +141,13 @@ begin
     perform pg_temp.__assert('B TIDAK bisa update listing A', true);
   end;
 
-  -- ================= CHAT =================
-  perform pg_temp.__as(b);
-  select public.open_conversation(l) into cv;
+-- ================= CHAT =================
+perform pg_temp.__as(b);
+perform pg_temp.__log('chat: uid='||coalesce(auth.uid()::text,'NULL'));
+perform pg_temp.__log('chat: listing aktif terlihat='||(select count(*) from public.listings where id=l and status='active')::text);
+perform pg_temp.__log('chat: profil B='||(select coalesce(status,'NULL') from public.profiles where id=b));
+perform pg_temp.__log('chat: seller_id di listing='||(select seller_id::text from public.listings where id=l));
+select public.open_conversation(l) into cv;
   perform pg_temp.__assert('B buka conversation listing A', cv is not null);
 
   perform pg_temp.__as(a);
@@ -308,9 +335,11 @@ begin
   end;
 
   -- ================= RINGKASAN =================
-  raise notice '================ HASIL ================';
-  raise notice 'PASSED  : %', (select count(*) from __results where pass);
-  raise notice 'FAILED  : %', (select count(*) from __results where not pass);
 end $$;
+
+select line from __dbg;
+
+-- Hasil machine-readable (statement terakhir → dikembalikan Management API/psql)
+select * from pg_temp.__summary();
 
 rollback;

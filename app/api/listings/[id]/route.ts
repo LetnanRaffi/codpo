@@ -92,8 +92,14 @@ export async function DELETE(req: Request, ctx: Ctx) {
     const { id } = await ctx.params;
     const db = userClient(req);
 
-    const { error } = await db.from("listings").delete().eq("id", id);
+    const { data: deleted, error } = await db
+      .from("listings")
+      .delete()
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
     if (error) throw error;
+    if (!deleted) throw new ApiError(404, "listing tidak ditemukan / bukan milikmu");
     return ok({ deleted: true });
   } catch (e) {
     return handleError(e);

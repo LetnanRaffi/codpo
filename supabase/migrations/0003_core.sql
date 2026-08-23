@@ -1,6 +1,30 @@
 -- Core: profiles (publik-safe), user_contacts (privat), user_locations (privat),
 -- categories, admin_users, admin_actions, app_config. RLS per PRD §45.
 
+-- Admin identity + check function DULU — dipakai policy di bawah.
+create table public.admin_users (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+alter table public.admin_users enable row level security;
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer set search_path = ''
+as $$
+  select exists (
+    select 1 from public.admin_users where user_id = auth.uid()
+  );
+$$;
+
+revoke execute on function public.is_admin() from anon;
+
+create policy "admin_users_select_admin" on public.admin_users for select using (public.is_admin());
+-- Insert/delete admin hanya via service role / SQL editor (tidak diekspos ke client).
+
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   name text not null default 'Pengguna Baru' check (char_length(btrim(name)) between 2 and 60),
@@ -145,15 +169,9 @@ insert into public.categories (slug, name, sort_order) values
   ('hobi', 'Hobi', 11),
   ('lainnya', 'Lainnya', 12);
 
--- Admin (PRD §43): di-seed manual lewat SQL editor setelah signup user pertama.
-create table public.admin_users (
-  user_id uuid primary key references public.profiles(id) on delete cascade,
-  created_at timestamptz not null default now()
-);
+-- Admin lama sudah dibuat di atas file; is_admin() juga.
 
-alter table public.admin_users enable row level security;
-create policy "admin_users_select_admin" on public.admin_users for select using (public.is_admin());
--- Insert/delete admin hanya via service role / SQL editor (tidak diekspos ke client).
+-- app_config: konfigurasi runtime (throttle GPS, retensi, dll) — dibaca server/fungsi DB.
 
 -- Audit trail semua aksi admin (wajib, prompt bagian J).
 create table public.admin_actions (

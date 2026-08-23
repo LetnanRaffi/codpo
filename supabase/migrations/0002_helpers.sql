@@ -13,19 +13,8 @@ begin
 end;
 $$;
 
--- Admin check — sumber tunggal untuk semua policy/endpoint admin (PRD §43).
-create or replace function public.is_admin()
-returns boolean
-language sql
-stable
-security definer set search_path = ''
-as $$
-  select exists (
-    select 1 from public.admin_users where user_id = auth.uid()
-  );
-$$;
-
-revoke execute on function public.is_admin() from anon;
+-- Admin check dipindah ke 0003_core.sql (setelah tabel admin_users dibuat —
+-- fungsi LANGUAGE SQL divalidasi referensinya saat CREATE).
 
 -- Bootstrap profile otomatis saat signup Supabase Auth (PRD §6: satu akun, switch mode).
 -- Nama diambil dari metadata signup; email TIDAK disalin ke profiles (tetap privat di auth.users).

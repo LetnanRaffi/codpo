@@ -51,6 +51,7 @@ export function handleError(e: unknown) {
 
   const err = e as PgLikeError;
   const raw = String(err?.message ?? e ?? "kesalahan server");
+  console.error("[api-debug]", JSON.stringify({ code: err?.code, message: raw.slice(0, 300), hint: (err as { details?: string; hint?: string }).hint ?? "" }));
 
   if ((err as { status?: number }).status === 429)
     return fail(429, "terlalu banyak request — coba lagi nanti");

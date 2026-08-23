@@ -180,3 +180,25 @@ Suite membuktikan antara lain:
 | report         | 5/jam/IP    |
 | boost-buy      | 10/jam/IP   |
 | listing-create | 10/jam/IP   |
+
+---
+
+## ⚠️ Known Issue — Project Supabase Lama (2026-08-23)
+
+Project `ehoytoerkxameyproivh` mengalami **GoTrue 500** ("Database error
+querying schema / finding user") untuk sebagian operasi login/listUsers.
+Terdiagnosis bukan bug backend:
+
+- Bukti DB-level: insert conversations dgn claims benar **sukses** (probe-setrole)
+- Bukti HTTP: 13+ kasus e2e PASS termasuk cross-user denial, state machine,
+  throttle GPS, upload R2 nyata
+- Pola gagal hanya di akun yang dibuat/dimodifikasi lewat SQL-insert langsung ke
+  `auth.users` (identities/linkage tidak konsisten dengan GoTrue versi platform)
+
+**Rekomendasi**: buat project Supabase baru (dashboard), isi `.env.local`
+dengan URL/key baru, lalu:
+```
+node scripts/mgmt-push.mjs     # atau supabase db push
+node scripts/api-e2e.mjs       # full green expected
+```
+Migration bersifat portabel — tidak ada yang perlu diubah.

@@ -51,7 +51,17 @@ create policy "boosts_select_own_or_admin"
   on public.listing_boosts for select
   using (seller_id = auth.uid() or public.is_admin());
 
--- Insert hanya lewat RPC purchase_boost (validasi ownership + snapshot harga).
+-- Insert lewat RPC purchase_boost — tapi tetap butuh policy (security invoker kena RLS).
+-- Validasi ownership lengkap ada di dalam fungsi; policy ini lapis pertama.
+create policy "boosts_insert_own"
+  on public.listing_boosts for insert
+  with check (
+    seller_id = auth.uid()
+    and exists (
+      select 1 from public.listings l
+       where l.id = listing_id and l.seller_id = auth.uid()
+    )
+  );
 create index boosts_listing_idx on public.listing_boosts(listing_id);
 create index boosts_seller_idx on public.listing_boosts(seller_id, created_at desc);
 

@@ -112,20 +112,23 @@ as $$
   select (p_from, p_to) in (values
     ('accepted'::public.cod_state,      'scheduled'::public.cod_state),
     ('accepted',                        'cancelled'),
+    ('accepted',                        'no_show'),
     ('scheduled',                       'otw'),
     ('scheduled',                       'arrived'),
     ('scheduled',                       'cancelled'),
+    ('scheduled',                       'no_show'),
     ('otw',                             'near_location'),
     ('otw',                             'arrived'),
     ('otw',                             'cancelled'),
+    ('otw',                             'no_show'),
     ('near_location',                   'arrived'),
     ('near_location',                   'cancelled'),
+    ('near_location',                   'no_show'),
     ('arrived',                         'item_check'),
     ('arrived',                         'cancelled'),
+    ('arrived',                         'disputed'),
     ('item_check',                      'completed'),
-    ('item_check',                      'disputed'),
-    (p_from in ('accepted','scheduled','otw','near_location'), 'no_show'),
-    (false, 'expired')
+    ('item_check',                      'disputed')
   );
 $$;
 
@@ -134,7 +137,7 @@ $$;
 create or replace function public.cod_transition(p_session_id uuid, p_target public.cod_state)
 returns public.cod_state
 language plpgsql
-security invoker set search_path = ''
+security invoker set search_path = public
 as $$
 declare v_row public.cod_sessions;
 begin
@@ -146,7 +149,7 @@ begin
 
   if v_row.id is null then raise exception 'sesi tidak ditemukan'; end if;
 
-  if public.cod_transition_allowed(v_row.state, p_target) = false then
+  if public.cod_transition_allowed(v_row.state, p_target) is not true then
     raise exception 'transisi % → % tidak valid', v_row.state, p_target;
   end if;
 
@@ -169,7 +172,7 @@ $$;
 create or replace function public.sync_transaction_on_session()
 returns trigger
 language plpgsql
-security definer set search_path = ''
+security definer set search_path = public
 as $$
 declare v_trx public.trx_status;
 begin
@@ -233,7 +236,7 @@ create index trx_seller_idx on public.transactions(seller_id, created_at desc);
 create or replace function public.accept_cod_request(p_request_id uuid)
 returns uuid
 language plpgsql
-security invoker set search_path = ''
+security invoker set search_path = public
 as $$
 declare v_req public.cod_requests; v_session uuid;
 begin
@@ -274,7 +277,7 @@ $$;
 create or replace function public.reject_cod_request(p_request_id uuid)
 returns void
 language plpgsql
-security invoker set search_path = ''
+security invoker set search_path = public
 as $$
 begin
   update public.cod_requests
@@ -288,7 +291,7 @@ create or replace function public.counter_cod_request(
   p_request_id uuid, p_date date, p_time time, p_point text
 ) returns void
 language plpgsql
-security invoker set search_path = ''
+security invoker set search_path = public
 as $$
 begin
   update public.cod_requests
@@ -331,14 +334,12 @@ create or replace function public.post_cod_location(
   p_session_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m int default null
 ) returns public.post_location_result
 language plpgsql
-security invoker set search_path = ''
+security invoker set search_path = public
 as $$
 declare
   v_session public.cod_sessions;
   v_cfg jsonb;
   v_last record;
-  v_dist_m double precision;
-  v_age_ms bigint;
 begin
   if auth.uid() is null then raise exception 'unauthorized' using errcode = '42501'; end if;
 
@@ -359,32 +360,34 @@ begin
 
   select value into v_cfg from public.app_config where key = 'gps';
 
-  -- Throttle waktu (default 30s — PRD §30: jangan tiap detik)
-  select extract(epoch from (now() - coalesce(v_session.last_location_at, 'epoch'::timestamptz))) * 1000
-    into v_age_ms;
-
-  if v_session.last_location_at is not null
-     and v_age_ms < coalesce((v_cfg->>'interval_ms')::bigint, 30000) then
-    return 'throttled';
-  end if;
-
-  -- Throttle jarak (default 50m)
-  select geom, st_distance(geom, st_setsrid(st_makepoint(p_lng, p_lat), 4326)::geography) as dist
+  -- Throttle waktu PER-USER (default 30s — PRD §30: jangan tiap detik).
+  -- clock_timestamp, bukan now(): now() = waktu transaksi → umur selalu 0.
+  select geom, recorded_at,
+         st_distance(geom, st_setsrid(st_makepoint(p_lng, p_lat), 4326)::public.geography) as dist
     into v_last
     from public.cod_locations
    where session_id = p_session_id and user_id = auth.uid()
    order by recorded_at desc limit 1;
 
-  v_dist_m := coalesce(v_last.dist, 1e9);
-  if v_last.geom is not null and v_dist_m < coalesce((v_cfg->>'min_distance_m')::int, 50) then
+  if v_last.recorded_at is not null
+     and extract(epoch from (clock_timestamp() - v_last.recorded_at)) * 1000
+         < coalesce((v_cfg->>'interval_ms')::bigint, 30000) then
     return 'throttled';
   end if;
 
-  insert into public.cod_locations (session_id, user_id, geom, accuracy_m)
-  values (p_session_id, auth.uid(), st_setsrid(st_makepoint(p_lng, p_lat), 4326)::geography, p_accuracy_m);
+  -- Throttle jarak (default 50m)
+  if v_last.geom is not null
+     and v_last.dist < coalesce((v_cfg->>'min_distance_m')::int, 50) then
+    return 'throttled';
+  end if;
+
+  insert into public.cod_locations (session_id, user_id, geom, accuracy_m, recorded_at)
+  values (p_session_id, auth.uid(),
+          st_setsrid(st_makepoint(p_lng, p_lat), 4326)::public.geography,
+          p_accuracy_m, clock_timestamp());
 
   update public.cod_sessions
-     set last_location_at = now()
+     set last_location_at = clock_timestamp()
    where id = p_session_id;
 
   return 'stored';
@@ -395,7 +398,7 @@ $$;
 create or replace function public.set_location_sharing(p_session_id uuid, p_enabled boolean)
 returns void
 language plpgsql
-security invoker set search_path = ''
+security invoker set search_path = public
 as $$
 begin
   update public.cod_sessions
@@ -413,7 +416,7 @@ $$;
 create or replace function public.purge_cod_locations()
 returns void
 language plpgsql
-security definer set search_path = ''
+security definer set search_path = public
 as $$
 declare v_retention jsonb;
 begin
@@ -442,7 +445,7 @@ $$;
 create or replace function public.purge_my_locations(p_session_id uuid)
 returns int
 language plpgsql
-security invoker set search_path = ''
+security invoker set search_path = public
 as $$
 declare v_deleted int;
 begin
@@ -468,7 +471,7 @@ $$;
 create or replace function public.expire_stale_cod_sessions()
 returns void
 language plpgsql
-security definer set search_path = ''
+security definer set search_path = public
 as $$
 begin
   update public.cod_sessions

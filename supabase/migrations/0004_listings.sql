@@ -70,7 +70,7 @@ begin
   if new.views <> old.views then
     raise exception 'views hanya bertambah via sistem';
   end if;
-  if new.status = 'removed' then
+  if new.status = 'removed' and auth.uid() is not null and not public.is_admin() then
     raise exception 'status removed hanya lewat moderasi admin';
   end if;
   return new;
@@ -110,7 +110,7 @@ create index listings_status_created_idx on public.listings(status, created_at d
 create index listings_seller_idx on public.listings(seller_id);
 create index listings_category_idx on public.listings(category_id);
 create index listings_geom_idx on public.listings using gist(geom);
-create index listings_title_trgm_idx on public.listings using gin (title extensions.gin_trgm_ops);
+create index listings_title_trgm_idx on public.listings using gin (title public.gin_trgm_ops);
 
 -- View publik: koordinat dibulatkan ~110m (PRD §13 — gak ada alamat presisi di publik).
 create view public.listing_public
