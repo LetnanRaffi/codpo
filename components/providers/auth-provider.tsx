@@ -9,7 +9,10 @@ import {
   useMemo,
   useState,
 } from "react";
-import { createClient } from "@/lib/supabase/client";
+import {
+  createClient,
+  hasSupabaseBrowserConfig,
+} from "@/lib/supabase/client";
 
 export interface AuthProfile {
   id: string;
@@ -30,14 +33,22 @@ interface AuthState {
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = useMemo(
+    () => (hasSupabaseBrowserConfig() ? createClient() : null),
+    [],
+  );
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<AuthProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => Boolean(supabase));
 
   const loadProfile = useCallback(
     async (nextUser: User | null) => {
       setUser(nextUser);
+      if (!supabase) {
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
       if (!nextUser) {
         setProfile(null);
         setLoading(false);
@@ -55,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
+    if (!supabase) return;
     void supabase.auth.getUser().then(({ data }) => loadProfile(data.user));
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
@@ -65,6 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loadProfile, supabase]);
 
   const signOut = useCallback(async () => {
+    if (!supabase) return;
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
@@ -72,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const setMode = useCallback(
     async (mode: "buyer" | "seller") => {
-      if (!user) return;
+      if (!user || !supabase) return;
       const { error } = await supabase
         .from("profiles")
         .update({ mode })
