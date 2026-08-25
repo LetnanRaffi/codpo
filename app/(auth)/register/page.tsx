@@ -1,7 +1,7 @@
 "use client";
 
-import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { z } from "zod";
 
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { createClient } from "@/lib/supabase/client";
 
 const registerSchema = z
   .object({
@@ -30,10 +31,11 @@ const registerSchema = z
 
 export default function RegisterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [success, setSuccess] = useState(false);
+  const [pending, setPending] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const router = useRouter();
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.currentTarget));
     const result = registerSchema.safeParse(data);
@@ -46,25 +48,39 @@ export default function RegisterPage() {
       return;
     }
     setErrors({});
-    setSuccess(true);
-  }
-
-  if (success) {
-    return (
-      <div className="flex flex-col items-center gap-3 rounded-xl border bg-card px-6 py-12 text-center">
-        <CheckCircle2 className="size-10 text-trust-green" aria-hidden />
-        <p className="font-display text-2xl font-bold tracking-wide uppercase">
-          Akun siap
-        </p>
-        <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
-          Demo frontend — akun belum dibuat di Supabase. Setelah backend aktif,
-          verifikasi email bakal jalan.
-        </p>
-        <Button className="mt-2 rounded-full" asChild>
-          <Link href="/login">Masuk sekarang</Link>
-        </Button>
-      </div>
-    );
+    setPending(true);
+    const supabase = createClient();
+    const { data: auth, error } = await supabase.auth.signUp({
+      email: result.data.email,
+      password: result.data.password,
+      options: {
+        data: { name: result.data.name, phone: result.data.phone },
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    if (error) {
+      setPending(false);
+      setErrors({ form: error.message });
+      return;
+    }
+    if (auth.session && auth.user) {
+      const { error: contactError } = await supabase
+        .from("user_contacts")
+        .upsert({
+          user_id: auth.user.id,
+          phone: result.data.phone,
+        });
+      if (contactError) {
+        setPending(false);
+        setErrors({ form: contactError.message });
+        return;
+      }
+      router.replace("/");
+      router.refresh();
+      return;
+    }
+    setPending(false);
+    router.replace("/login?registered=1");
   }
 
   const field = (
@@ -170,11 +186,16 @@ export default function RegisterPage() {
         <Button
           type="submit"
           size="lg"
-          disabled={!agreed}
+          disabled={!agreed || pending}
           className="w-full rounded-full font-bold"
         >
-          Buat akun
+          {pending ? "Membuat akun…" : "Buat akun"}
         </Button>
+        {errors.form && (
+          <p role="alert" className="text-sm font-medium text-bu-red-deep">
+            {errors.form}
+          </p>
+        )}
       </form>
 
       <p className="mt-5 text-center text-sm text-muted-foreground">

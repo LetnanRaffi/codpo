@@ -1,4 +1,4 @@
-import { handleError, ok } from "@/lib/server/api";
+import { ApiError, handleError, ok } from "@/lib/server/api";
 import { requireUser } from "@/lib/server/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -11,7 +11,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     const user = await requireUser(req);
     const body = (await req.json().catch(() => ({}))) as { read?: boolean };
     if (body.read !== true) {
-      return ok({ error: "body harus {read:true}" }, 422);
+      throw new ApiError(422, "body harus {read:true}");
     }
     const { id } = await ctx.params;
 

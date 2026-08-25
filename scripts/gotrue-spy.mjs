@@ -7,15 +7,24 @@ const env = Object.fromEntries(
   readFileSync(".env.local", "utf8")
     .split("\n")
     .filter((l) => l.includes("="))
-    .map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim()]),
+    .map((l) => [
+      l.slice(0, l.indexOf("=")).trim(),
+      l.slice(l.indexOf("=") + 1).trim(),
+    ]),
 );
-const ref = env.NEXT_PUBLIC_SUPABASE_URL.match(/https:\/\/([a-z0-9]+)\.supabase\.co/)[1];
-const token = JSON.parse(readFileSync("/home/pasha/.local/share/opencode/mcp-auth.json", "utf8"))
-  .supabase.tokens.accessToken;
+const ref = env.NEXT_PUBLIC_SUPABASE_URL.match(
+  /https:\/\/([a-z0-9]+)\.supabase\.co/,
+)[1];
+const token = JSON.parse(
+  readFileSync("/home/pasha/.local/share/opencode/mcp-auth.json", "utf8"),
+).supabase.tokens.accessToken;
 const anon = createAnon();
 
 function createAnon() {
-  return createClientSafe(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  return createClientSafe(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  );
 }
 function createClientSafe(u, k) {
   // hindari import di atas biar simpel
@@ -24,11 +33,17 @@ function createClientSafe(u, k) {
 }
 
 async function q(sql) {
-  const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ query: sql }),
-  });
+  const res = await fetch(
+    `https://api.supabase.com/v1/projects/${ref}/database/query`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query: sql }),
+    },
+  );
   return res.text();
 }
 

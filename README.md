@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CODPO
 
-## Getting Started
+Marketplace lokal untuk jual-beli barang secara COD. Aplikasi ini memakai Next.js App Router, Supabase (Auth, PostgreSQL, RLS, Realtime), dan Cloudflare R2 untuk media.
 
-First, run the development server:
+## Fitur
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Auth email/password, profil buyer/seller, dan kontrol akun admin
+- Listing, pencarian radius, kategori, BU, boost, favorit, dan upload foto
+- Chat realtime, permintaan COD, state transaksi, serta berbagi lokasi berbasis consent
+- Riwayat transaksi, rating, laporan, notifikasi, dashboard seller, dan dashboard admin
+- Row-level security, validasi API, rate limit, serta URL upload R2 yang ditandatangani
+
+## Menjalankan lokal
+
+Gunakan Node.js 20 atau lebih baru, lalu salin konfigurasi berikut ke `.env.local`:
+
+```dotenv
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=
+R2_PUBLIC_BASE_URL=
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Instal dependency, terapkan migration, lalu jalankan aplikasi:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm ci
+node scripts/mgmt-push.mjs
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`scripts/mgmt-push.mjs` memerlukan token Supabase Management API pada environment pengembangan yang sudah dikonfigurasi. Untuk deployment lain, migration di `supabase/migrations/` juga bisa diterapkan melalui workflow Supabase CLI/CI.
 
-## Learn More
+## Verifikasi
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build -- --webpack
+node scripts/cred-check.mjs
+node scripts/api-e2e.mjs
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+E2E API membuat akun dan data sementara dengan prefix `codpo.test.` lalu membersihkannya kembali. Jalankan terhadap environment pengujian, bukan database produksi yang sedang menerima trafik.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Struktur penting
 
-## Deploy on Vercel
+- `app/` — halaman dan route handler Next.js
+- `components/` — UI dan client interactions
+- `lib/server/` — auth, validasi, query marketplace, dan helper API
+- `supabase/migrations/` — schema, RLS, function, trigger, serta grant
+- `scripts/api-e2e.mjs` — audit alur penuh lintas dua pengguna dan admin
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Sebelum go-live, lengkapi data bisnis serta review hukum pada `tos-codpo-draft.md` dan `privacy-policy-codpo-draft.md`.

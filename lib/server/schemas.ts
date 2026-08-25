@@ -18,7 +18,36 @@ export const listingCreateSchema = z.object({
   lng: z.number().min(-180).max(180),
 });
 
-export const listingUpdateSchema = listingCreateSchema.partial();
+// Jangan gunakan listingCreateSchema.partial(): Zod tetap menerapkan `.default()`
+// pada field yang tidak dikirim sehingga PATCH parsial bisa mereset sale_type,
+// cod_available, dan description tanpa disengaja.
+export const listingUpdateSchema = z
+  .object({
+    title: z.string().trim().min(5).max(140).optional(),
+    description: z.string().max(5000).optional(),
+    category_slug: z
+      .string()
+      .regex(/^[a-z0-9-]{2,40}$/)
+      .optional(),
+    condition: z
+      .enum(["baru", "seperti_baru", "baik", "layak_pakai"])
+      .optional(),
+    normal_price: price.optional(),
+    bu_price: price.nullish(),
+    bu_expires_at: z.string().datetime().nullish(),
+    sale_type: z.enum(["NORMAL", "BU"]).optional(),
+    cod_available: z.boolean().optional(),
+    status: z.enum(["active", "inactive"]).optional(),
+    area_label: z.string().trim().min(1).max(80).optional(),
+    lat: z.number().min(-90).max(90).optional(),
+    lng: z.number().min(-180).max(180).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "minimal satu field harus diubah",
+  })
+  .refine((value) => (value.lat === undefined) === (value.lng === undefined), {
+    message: "lat dan lng harus dikirim bersamaan",
+  });
 
 export const presignSchema = z.object({
   kind: z.enum(["listing", "chat"]),
@@ -57,15 +86,12 @@ export const codRequestCreateSchema = z.object({
 export const codRequestDecisionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("accept"),
-    request_id: uuid,
   }),
   z.object({
     action: z.literal("reject"),
-    request_id: uuid,
   }),
   z.object({
     action: z.literal("counter"),
-    request_id: uuid,
     counter_date: z.string().date(),
     counter_time: z.string().time(),
     counter_meeting_point: z.string().trim().min(3).max(200),

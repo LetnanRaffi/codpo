@@ -20,7 +20,7 @@ import { EmptyState } from "@/components/empty-state";
 import { ListingCard } from "@/components/listing/listing-card";
 import { SectionRow } from "@/components/section-row";
 import { effectivePrice } from "@/lib/listing";
-import { CATEGORIES, MOCK_LISTINGS } from "@/lib/mock/data";
+import { getCategories, searchListings } from "@/lib/server/marketplace";
 
 const CATEGORY_ICONS: Record<
   string,
@@ -40,14 +40,18 @@ const CATEGORY_ICONS: Record<
   lainnya: Package,
 };
 
-export default function HomePage() {
-  const buTerdekat = MOCK_LISTINGS.filter((l) => l.sale_type === "BU").sort(
-    (a, b) => a.distance_km - b.distance_km,
-  );
-  const baruDitambahkan = [...MOCK_LISTINGS].sort(
+export default async function HomePage() {
+  const [categories, listings] = await Promise.all([
+    getCategories(),
+    searchListings({ limit: 48 }),
+  ]);
+  const buTerdekat = listings
+    .filter((l) => l.sale_type === "BU")
+    .sort((a, b) => a.distance_km - b.distance_km);
+  const baruDitambahkan = [...listings].sort(
     (a, b) => +new Date(b.created_at) - +new Date(a.created_at),
   );
-  const hargaMenarik = [...MOCK_LISTINGS].sort(
+  const hargaMenarik = [...listings].sort(
     (a, b) => effectivePrice(a) - effectivePrice(b),
   );
 
@@ -113,7 +117,7 @@ export default function HomePage() {
           Kategori
         </h2>
         <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-          {CATEGORIES.map((category) => {
+          {categories.map((category) => {
             const Icon = CATEGORY_ICONS[category.slug] ?? Package;
             return (
               <Link
@@ -135,9 +139,9 @@ export default function HomePage() {
         <h2 className="font-display text-2xl font-bold tracking-wide uppercase">
           Semua Barang
         </h2>
-        {MOCK_LISTINGS.length > 0 ? (
+        {listings.length > 0 ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {MOCK_LISTINGS.map((listing) => (
+            {listings.map((listing) => (
               <ListingCard key={listing.id} listing={listing} />
             ))}
           </div>

@@ -2,7 +2,7 @@
 
 import { Flame, SearchX, SlidersHorizontal } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { EmptyState } from "@/components/empty-state";
 import { ListingCard } from "@/components/listing/listing-card";
@@ -26,9 +26,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { effectivePrice } from "@/lib/listing";
-import { CATEGORIES, MOCK_LISTINGS } from "@/lib/mock/data";
-import type { Condition, Listing } from "@/lib/types";
+import type { Category, Condition, Listing } from "@/lib/types";
 
 const CONDITIONS: { value: Condition | ""; label: string }[] = [
   { value: "", label: "Semua kondisi" },
@@ -66,65 +64,14 @@ const EMPTY_FILTERS: Filters = {
   codOnly: false,
 };
 
-// ponytail: skor deterministic sederhana (jarak dominan + BU + rating + boost);
-// ganti ranking PRD §21 penuh saat data asli + PostGIS masuk
-function recommendedScore(l: Listing): number {
-  return (
-    -l.distance_km * 2 +
-    (l.sale_type === "BU" ? 3 : 0) +
-    l.seller_rating +
-    (l.boosted ? 2 : 0)
-  );
-}
-
-function applyFilters(
-  q: string,
-  radiusKm: number,
-  f: Filters,
-  sort: SortKey,
-): Listing[] {
-  const keyword = q.trim().toLowerCase();
-  const min = Number(f.minPrice) || 0;
-  const max = Number(f.maxPrice) || Infinity;
-
-  const result = MOCK_LISTINGS.filter((l) => {
-    if (
-      keyword &&
-      !`${l.title} ${l.description}`.toLowerCase().includes(keyword)
-    )
-      return false;
-    if (f.categorySlug && l.category_slug !== f.categorySlug) return false;
-    if (l.distance_km > radiusKm) return false;
-    const price = effectivePrice(l);
-    if (price < min || price > max) return false;
-    if (f.buOnly && l.sale_type !== "BU") return false;
-    if (f.codOnly && !l.cod_available) return false;
-    if (f.condition && l.condition !== f.condition) return false;
-    return true;
-  });
-
-  switch (sort) {
-    case "terdekat":
-      return result.sort((a, b) => a.distance_km - b.distance_km);
-    case "terbaru":
-      return result.sort(
-        (a, b) => +new Date(b.created_at) - +new Date(a.created_at),
-      );
-    case "termurah":
-      return result.sort((a, b) => effectivePrice(a) - effectivePrice(b));
-    case "termahal":
-      return result.sort((a, b) => effectivePrice(b) - effectivePrice(a));
-    default:
-      return result.sort((a, b) => recommendedScore(b) - recommendedScore(a));
-  }
-}
-
 function FilterPanel({
   filters,
   setFilters,
+  categories,
 }: {
   filters: Filters;
   setFilters: (f: Filters) => void;
+  categories: Category[];
 }) {
   const { radiusKm } = useRadius();
 
@@ -144,7 +91,7 @@ function FilterPanel({
           >
             Semua
           </button>
-          {CATEGORIES.map((c) => (
+          {categories.map((c) => (
             <button
               key={c.slug}
               type="button"
@@ -243,9 +190,46 @@ function FilterPanel({
   );
 }
 
-export function SearchClient() {
+type SearchRow = Record<string, unknown>;
+
+function mapRow(row: SearchRow): Listing {
+  const sellerId = String(row.seller_id ?? "");
+  const rating = Number(row.seller_rating ?? 0);
+  return {
+    id: String(row.id),
+    title: String(row.title),
+    description: String(row.description ?? ""),
+    category_id: "",
+    category_slug: String(row.category_slug ?? "lainnya"),
+    condition: String(row.condition ?? "baik") as Condition,
+    price: Number(row.normal_price ?? 0),
+    bu_price: row.bu_price == null ? null : Number(row.bu_price),
+    sale_type: String(row.effective_sale_type ?? "NORMAL") as "NORMAL" | "BU",
+    bu_expires_at: null,
+    images: [],
+    area_label: String(row.area_label ?? "Indonesia"),
+    distance_km: Number(row.distance_km ?? 0),
+    cod_available: Boolean(row.cod_available),
+    seller_rating: rating,
+    seller: {
+      id: sellerId,
+      name: String(row.seller_name ?? "Pengguna CODPO"),
+      avatar_url: null,
+      rating,
+      completed_transactions: 0,
+      verified: false,
+      member_since: String(row.created_at).slice(0, 7),
+    },
+    views: 0,
+    status: "active",
+    boosted: Boolean(row.boosted),
+    created_at: String(row.created_at),
+  };
+}
+
+export function SearchClient({ categories }: { categories: Category[] }) {
   const searchParams = useSearchParams();
-  const { radiusKm } = useRadius();
+  const { radiusKm, position } = useRadius();
   const q = searchParams.get("q") ?? "";
   const [sort, setSort] = useState<SortKey>("recommended");
   const [filters, setFilters] = useState<Filters>({
@@ -253,11 +237,33 @@ export function SearchClient() {
     buOnly: searchParams.get("bu") === "1",
   });
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [results, setResults] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const results = useMemo(
-    () => applyFilters(q, radiusKm, filters, sort),
-    [q, radiusKm, filters, sort],
-  );
+  useEffect(() => {
+    const controller = new AbortController();
+    const query = new URLSearchParams({ sort, limit: "50" });
+    if (q) query.set("q", q);
+    if (filters.categorySlug) query.set("category_slug", filters.categorySlug);
+    if (filters.condition) query.set("condition", filters.condition);
+    if (filters.minPrice) query.set("min_price", filters.minPrice);
+    if (filters.maxPrice) query.set("max_price", filters.maxPrice);
+    if (filters.buOnly) query.set("bu_only", "true");
+    if (filters.codOnly) query.set("cod_only", "true");
+    if (position) {
+      query.set("lat", String(position.lat));
+      query.set("lng", String(position.lng));
+      query.set("radius_m", String(radiusKm * 1000));
+    }
+    fetch(`/api/listings?${query}`, { signal: controller.signal })
+      .then((response) => response.json())
+      .then((payload) => setResults((payload.data?.items ?? []).map(mapRow)))
+      .catch((error) => {
+        if (error.name !== "AbortError") setResults([]);
+      })
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+  }, [q, filters, sort, radiusKm, position]);
   const activeFilterCount =
     (filters.categorySlug ? 1 : 0) +
     (filters.condition ? 1 : 0) +
@@ -265,7 +271,13 @@ export function SearchClient() {
     (filters.buOnly ? 1 : 0) +
     (filters.codOnly ? 1 : 0);
 
-  const filterPanel = <FilterPanel filters={filters} setFilters={setFilters} />;
+  const filterPanel = (
+    <FilterPanel
+      filters={filters}
+      setFilters={setFilters}
+      categories={categories}
+    />
+  );
 
   return (
     <div className="lg:flex lg:items-start lg:gap-8">
@@ -276,7 +288,8 @@ export function SearchClient() {
               {q ? `Hasil "${q}"` : "Jelajahi Barang"}
             </h1>
             <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-              {results.length} barang · radius {radiusKm} km
+              {loading ? "Mencari…" : `${results.length} barang`} · radius{" "}
+              {radiusKm} km
             </p>
           </div>
 

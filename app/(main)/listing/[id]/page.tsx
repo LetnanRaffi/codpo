@@ -12,6 +12,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CodRequestDialog } from "@/components/listing/cod-request-dialog";
+import { FavoriteButton } from "@/components/listing/favorite-button";
+import { ReportDialog } from "@/components/listing/report-dialog";
 import { Gallery } from "@/components/listing/gallery";
 import { PriceStrike } from "@/components/price-strike";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -20,21 +22,21 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { formatDistance, formatIDR, timeAgo } from "@/lib/format";
 import { CONDITION_LABELS, effectivePrice } from "@/lib/listing";
-import { CATEGORIES, MOCK_LISTINGS } from "@/lib/mock/data";
+import {
+  getCategories,
+  getListing,
+  recordListingView,
+} from "@/lib/server/marketplace";
 
 interface ListingPageProps {
   params: Promise<{ id: string }>;
-}
-
-export function generateStaticParams() {
-  return MOCK_LISTINGS.map((l) => ({ id: l.id }));
 }
 
 export async function generateMetadata({
   params,
 }: ListingPageProps): Promise<Metadata> {
   const { id } = await params;
-  const listing = MOCK_LISTINGS.find((l) => l.id === id);
+  const listing = await getListing(id);
   if (!listing) notFound();
   return { title: listing.title };
 }
@@ -50,10 +52,14 @@ function initials(name: string) {
 
 export default async function ListingPage({ params }: ListingPageProps) {
   const { id } = await params;
-  const listing = MOCK_LISTINGS.find((l) => l.id === id);
+  const [listing, categories] = await Promise.all([
+    getListing(id),
+    getCategories(),
+  ]);
   if (!listing) notFound();
+  await recordListingView(id);
 
-  const category = CATEGORIES.find((c) => c.slug === listing.category_slug);
+  const category = categories.find((c) => c.slug === listing.category_slug);
   const isBU = listing.sale_type === "BU";
 
   const infoBlock = (
@@ -172,6 +178,7 @@ export default async function ListingPage({ params }: ListingPageProps) {
       {/* CTA desktop */}
       <div className="hidden gap-2 md:flex">
         <CodRequestDialog
+          listingId={listing.id}
           listingTitle={listing.title}
           trigger={
             <Button size="lg" className="flex-1 rounded-full font-bold">
@@ -189,12 +196,16 @@ export default async function ListingPage({ params }: ListingPageProps) {
             <MessageSquare aria-hidden /> Chat Seller
           </Link>
         </Button>
+        <FavoriteButton listingId={listing.id} />
       </div>
 
       <p className="hidden text-center text-xs text-muted-foreground md:block">
         Bayar langsung saat ketemu (cash/transfer/e-wallet). CODPO gak pegang
         uang transaksi.
       </p>
+      <div className="flex justify-center">
+        <ReportDialog listingId={listing.id} />
+      </div>
     </div>
   );
 
@@ -241,6 +252,7 @@ export default async function ListingPage({ params }: ListingPageProps) {
       <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 border-t bg-background/95 px-4 py-2.5 backdrop-blur md:hidden">
         <div className="mx-auto flex max-w-7xl gap-2">
           <CodRequestDialog
+            listingId={listing.id}
             listingTitle={listing.title}
             trigger={
               <Button className="flex-1 rounded-full font-bold">

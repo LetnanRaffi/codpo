@@ -10,9 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PriceStrike } from "@/components/price-strike";
+import { useAuth } from "@/components/providers/auth-provider";
+import { apiFetch } from "@/lib/client/api";
 import { CONDITION_LABELS } from "@/lib/listing";
-import { CATEGORIES } from "@/lib/mock/data";
-import type { Condition } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
+import type { Category, Condition } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const MAX_PHOTOS = 5;
@@ -30,10 +32,13 @@ function chip(active: boolean) {
   );
 }
 
-export function SellForm() {
+export function SellForm({ categories }: { categories: Category[] }) {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [photos, setPhotos] = useState<{ url: string; name: string }[]>([]);
+  const [photos, setPhotos] = useState<
+    { url: string; name: string; file: File }[]
+  >([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [categorySlug, setCategorySlug] = useState("");
@@ -46,13 +51,22 @@ export function SellForm() {
   const [area, setArea] = useState("");
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [position, setPosition] = useState<{ lat: number; lng: number } | null>(
+    null,
+  );
 
   function addPhotos(files: FileList | null) {
     if (!files) return;
     const room = MAX_PHOTOS - photos.length;
     const next = Array.from(files)
       .slice(0, room)
-      .map((f) => ({ url: URL.createObjectURL(f), name: f.name }));
+      .filter(
+        (file) =>
+          ["image/jpeg", "image/png", "image/webp"].includes(file.type) &&
+          file.size <= 5 * 1024 * 1024,
+      )
+      .map((f) => ({ url: URL.createObjectURL(f), name: f.name, file: f }));
     setPhotos((p) => [...p, ...next]);
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -62,17 +76,106 @@ export function SellForm() {
     setPhotos((p) => p.filter((x) => x.url !== url));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (!user) {
+      router.push("/login?next=/sell");
+      return;
+    }
     if (photos.length === 0) {
       setError("Minimal 1 foto barang.");
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    // UI-only: belum ada upload/backend — preview object URL dibuang di sini
-    for (const p of photos) URL.revokeObjectURL(p.url);
-    setSubmitted(true);
+    if (!categorySlug || !condition) {
+      setError("Pilih kategori dan kondisi barang.");
+      return;
+    }
+    if (!position) {
+      setError(
+        "Ambil lokasi listing dulu agar barang bisa ditemukan pembeli sekitar.",
+      );
+      return;
+    }
+    if (
+      saleType === "BU" &&
+      (!Number(buPrice) || Number(buPrice) >= Number(price))
+    ) {
+      setError("Harga BU harus lebih murah dari harga normal.");
+      return;
+    }
+
+    setPending(true);
+    try {
+      const durationMs =
+        buDuration === "7d"
+          ? 7 * 86400000
+          : buDuration === "3d"
+            ? 3 * 86400000
+            : 86400000;
+      const created = await apiFetch<{ id: string }>("/api/listings", {
+        method: "POST",
+        body: JSON.stringify({
+          title,
+          description,
+          category_slug: categorySlug,
+          condition,
+          normal_price: Number(price),
+          bu_price: saleType === "BU" ? Number(buPrice) : null,
+          bu_expires_at:
+            saleType === "BU"
+              ? new Date(Date.now() + durationMs).toISOString()
+              : null,
+          sale_type: saleType,
+          cod_available: codAvailable,
+          area_label: area,
+          lat: position.lat,
+          lng: position.lng,
+        }),
+      });
+      const supabase = createClient();
+      for (let index = 0; index < photos.length; index++) {
+        const photo = photos[index];
+        const signed = await apiFetch<{
+          key: string;
+          upload_url: string;
+          headers: Record<string, string>;
+        }>("/api/upload/presign", {
+          method: "POST",
+          body: JSON.stringify({
+            kind: "listing",
+            mime: photo.file.type,
+            size: photo.file.size,
+            listing_id: created.id,
+          }),
+        });
+        const upload = await fetch(signed.upload_url, {
+          method: "PUT",
+          headers: signed.headers,
+          body: photo.file,
+        });
+        if (!upload.ok) throw new Error(`Upload foto ${index + 1} gagal`);
+        const { error: imageError } = await supabase
+          .from("listing_images")
+          .insert({
+            listing_id: created.id,
+            object_key: signed.key,
+            position: index,
+          });
+        if (imageError) throw imageError;
+      }
+      for (const photo of photos) URL.revokeObjectURL(photo.url);
+      setSubmitted(true);
+      router.push(`/listing/${created.id}`);
+      router.refresh();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Gagal memasang listing",
+      );
+    } finally {
+      setPending(false);
+    }
   }
 
   if (submitted) {
@@ -83,8 +186,7 @@ export function SellForm() {
           Listing siap tayang
         </p>
         <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-          Ini demo frontend — data belum kesimpen ke mana-mana. Begitu backend
-          nyala, listing ini langsung masuk feed.
+          Data dan foto sudah tersimpan. Listing kamu sekarang muncul di feed.
         </p>
         <div className="mt-2 flex gap-2">
           <Button className="rounded-full" onClick={() => router.push("/")}>
@@ -199,7 +301,7 @@ export function SellForm() {
         <div className="space-y-2">
           <Label className="text-sm font-semibold">Kategori</Label>
           <div className="flex flex-wrap gap-1.5">
-            {CATEGORIES.map((c) => (
+            {categories.map((c) => (
               <button
                 key={c.slug}
                 type="button"
@@ -356,6 +458,32 @@ export function SellForm() {
             Alamat lengkap gak dipublish — cuma area umum. Titik COD presisi
             dibagi belakangan, setelah deal.
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-full"
+            onClick={() => {
+              if (!navigator.geolocation) {
+                setError("Browser tidak mendukung lokasi.");
+                return;
+              }
+              navigator.geolocation.getCurrentPosition(
+                ({ coords }) => {
+                  setPosition({ lat: coords.latitude, lng: coords.longitude });
+                  setError("");
+                },
+                () =>
+                  setError(
+                    "Izin lokasi ditolak. Aktifkan lokasi browser lalu coba lagi.",
+                  ),
+                { enableHighAccuracy: true, timeout: 10000 },
+              );
+            }}
+          >
+            <MapPin className="size-3.5" />{" "}
+            {position ? "Lokasi sudah diambil" : "Ambil lokasi perangkat"}
+          </Button>
         </div>
         <Label className="flex items-center gap-2.5 font-semibold">
           <Checkbox
@@ -376,9 +504,12 @@ export function SellForm() {
         <Button
           type="submit"
           size="lg"
+          disabled={pending || authLoading}
           className="w-full rounded-full font-bold"
         >
-          Pasang Listing{saleType === "BU" ? " 🔥 BU" : ""}
+          {pending
+            ? "Menyimpan & mengunggah…"
+            : `Pasang Listing${saleType === "BU" ? " 🔥 BU" : ""}`}
           {Number(price) > 0 &&
             ` · Rp${(saleType === "BU" && Number(buPrice) ? Number(buPrice) : Number(price)).toLocaleString("id-ID")}`}
         </Button>

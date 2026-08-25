@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
-import { CATEGORIES } from "@/lib/mock/data";
+import { createClient } from "@/lib/supabase/client";
+import type { Category } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function CategoryLink({
@@ -33,6 +35,15 @@ function CategoryLink({
 
 export function CategoryNav() {
   const pathname = usePathname();
+  const [categories, setCategories] = useState<Category[]>([]);
+  useEffect(() => {
+    void createClient()
+      .from("categories")
+      .select("id,slug,name")
+      .eq("active", true)
+      .order("sort_order")
+      .then(({ data }) => setCategories((data ?? []) as Category[]));
+  }, []);
 
   return (
     <nav
@@ -43,7 +54,7 @@ export function CategoryNav() {
         <CategoryLink href="/" active={pathname === "/"}>
           Semua
         </CategoryLink>
-        {CATEGORIES.map((category) => (
+        {categories.map((category) => (
           <CategoryLink
             key={category.slug}
             href={`/category/${category.slug}`}

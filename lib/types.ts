@@ -41,13 +41,6 @@ export interface Listing {
   created_at: string;
 }
 
-export interface MockUser {
-  id: string;
-  name: string;
-  avatar_url: string | null;
-  mode: "buyer" | "seller";
-}
-
 export type MessageType =
   "text" | "image" | "system" | "location" | "cod_action";
 

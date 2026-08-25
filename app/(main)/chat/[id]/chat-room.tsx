@@ -10,20 +10,17 @@ import {
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import { CodRequestDialog } from "@/components/listing/cod-request-dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatIDR } from "@/lib/format";
-import { MOCK_MESSAGES } from "@/lib/mock/chat";
+import { apiFetch } from "@/lib/client/api";
+import { createClient } from "@/lib/supabase/client";
 import type { Conversation, Listing, Message } from "@/lib/types";
 
-const QUICK_ACTIONS = [
-  "Ajukan COD",
-  "Kirim Lokasi",
-  "Saya OTW",
-  "Saya Sudah Sampai",
-] as const;
+const QUICK_ACTIONS = ["Kirim Lokasi"] as const;
 
 function initials(name: string) {
   return name
@@ -34,7 +31,13 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-function Bubble({ message }: { message: Message }) {
+function Bubble({
+  message,
+  currentUserId,
+}: {
+  message: Message;
+  currentUserId: string;
+}) {
   const time = new Date(message.created_at).toLocaleTimeString("id-ID", {
     hour: "2-digit",
     minute: "2-digit",
@@ -91,11 +94,11 @@ function Bubble({ message }: { message: Message }) {
 
   return (
     <p
-      className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${message.sender_id === "usr-test" ? "ml-auto rounded-br-sm bg-bu-red text-white" : "mr-auto rounded-bl-sm bg-muted"}`}
+      className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${message.sender_id === currentUserId ? "ml-auto rounded-br-sm bg-bu-red text-white" : "mr-auto rounded-bl-sm bg-muted"}`}
     >
       {message.body}
       <span
-        className={`mt-0.5 block font-mono text-[10px] ${message.sender_id === "usr-test" ? "text-white/70" : "text-muted-foreground"}`}
+        className={`mt-0.5 block font-mono text-[10px] ${message.sender_id === currentUserId ? "text-white/70" : "text-muted-foreground"}`}
       >
         {time}
       </span>
@@ -106,60 +109,104 @@ function Bubble({ message }: { message: Message }) {
 export function ChatRoom({
   conversation,
   listing,
+  currentUserId,
+  otherName,
+  initialMessages,
 }: {
   conversation: Conversation;
   listing: Listing;
+  currentUserId: string;
+  otherName: string;
+  initialMessages: Message[];
 }) {
-  const [messages, setMessages] = useState<Message[]>(
-    MOCK_MESSAGES[conversation.id] ?? [],
-  );
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
+  const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`messages:${conversation.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${conversation.id}`,
+        },
+        (payload) => {
+          const message = payload.new as Message;
+          setMessages((current) =>
+            current.some((item) => item.id === message.id)
+              ? current
+              : [...current, message],
+          );
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [conversation.id]);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
-  function append(partial: Omit<Message, "id" | "created_at">) {
-    setMessages((m) => [
-      ...m,
-      {
-        ...partial,
-        id: `local-${Date.now()}`,
-        created_at: new Date().toISOString(),
-      },
-    ]);
-  }
-
-  function handleQuickAction(action: (typeof QUICK_ACTIONS)[number]) {
-    switch (action) {
-      case "Ajukan COD":
-        append({
-          sender_id: "usr-test",
-          type: "cod_action",
-          body: "Menunggu usulan waktu & titik temu…",
-          cod_status: "requested",
-        });
-        break;
-      case "Kirim Lokasi":
-        append({
-          sender_id: "usr-test",
-          type: "location",
-          body: "Lokasiku sekarang — Titik temu disepakati dulu ya",
-        });
-        break;
-      default:
-        append({ sender_id: "usr-test", type: "system", body: action });
+  async function handleQuickAction() {
+    if (!navigator.geolocation) {
+      setError("Browser tidak mendukung lokasi.");
+      return;
     }
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          await apiFetch(`/api/conversations/${conversation.id}/messages`, {
+            method: "POST",
+            body: JSON.stringify({
+              type: "location",
+              body: `Lokasi saya: https://maps.google.com/?q=${coords.latitude},${coords.longitude}`,
+            }),
+          });
+        } catch (cause) {
+          setError(
+            cause instanceof Error ? cause.message : "Gagal mengirim lokasi",
+          );
+        }
+      },
+      () => setError("Izin lokasi ditolak."),
+    );
   }
 
-  function handleSend(e: React.FormEvent) {
+  async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     const text = draft.trim();
     if (!text) return;
-    append({ sender_id: "usr-test", type: "text", body: text });
-    setDraft("");
+    setSending(true);
+    setError("");
+    try {
+      const sent = await apiFetch<{ id: string; created_at: string }>(
+        `/api/conversations/${conversation.id}/messages`,
+        { method: "POST", body: JSON.stringify({ type: "text", body: text }) },
+      );
+      setMessages((current) =>
+        current.some((item) => item.id === sent.id)
+          ? current
+          : [
+              ...current,
+              { ...sent, sender_id: currentUserId, type: "text", body: text },
+            ],
+      );
+      setDraft("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Gagal mengirim pesan");
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -178,13 +225,11 @@ export function ChatRoom({
         </Button>
         <Avatar className="size-9 shrink-0">
           <AvatarFallback className="bg-secondary text-xs font-bold">
-            {initials(listing.seller.name)}
+            {initials(otherName)}
           </AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1 leading-tight">
-          <p className="truncate text-sm font-semibold">
-            {listing.seller.name}
-          </p>
+          <p className="truncate text-sm font-semibold">{otherName}</p>
           <p className="font-mono text-[11px] text-muted-foreground">
             ⭐ {listing.seller.rating.toLocaleString("id-ID")} · biasanya balas
             cepat
@@ -226,17 +271,30 @@ export function ChatRoom({
         className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-4"
       >
         {messages.map((m) => (
-          <Bubble key={m.id} message={m} />
+          <Bubble key={m.id} message={m} currentUserId={currentUserId} />
         ))}
       </div>
 
       {/* Quick actions */}
       <div className="flex [scrollbar-width:none] gap-1.5 overflow-x-auto border-t px-4 pt-2 pb-1 [&::-webkit-scrollbar]:hidden">
+        <CodRequestDialog
+          listingId={listing.id}
+          listingTitle={listing.title}
+          conversationId={conversation.id}
+          trigger={
+            <button
+              type="button"
+              className="shrink-0 rounded-full border bg-card px-3 py-1.5 text-xs font-medium"
+            >
+              Ajukan COD
+            </button>
+          }
+        />
         {QUICK_ACTIONS.map((action) => (
           <button
             key={action}
             type="button"
-            onClick={() => handleQuickAction(action)}
+            onClick={() => handleQuickAction()}
             className="shrink-0 rounded-full border bg-card px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors hover:bg-accent"
           >
             {action === "Kirim Lokasi" && (
@@ -249,6 +307,9 @@ export function ChatRoom({
           </button>
         ))}
       </div>
+      {error && (
+        <p className="px-4 text-xs font-medium text-bu-red-deep">{error}</p>
+      )}
 
       {/* Input */}
       <form onSubmit={handleSend} className="flex items-center gap-2 px-4 py-3">
@@ -263,7 +324,7 @@ export function ChatRoom({
           type="submit"
           size="icon"
           className="shrink-0 rounded-full"
-          disabled={!draft.trim()}
+          disabled={!draft.trim() || sending}
           aria-label="Kirim pesan"
         >
           <SendHorizontal className="size-4" aria-hidden />

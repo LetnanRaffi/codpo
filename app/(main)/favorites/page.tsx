@@ -1,18 +1,27 @@
 import { Heart } from "lucide-react";
 import type { Metadata } from "next";
-
+import { redirect } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { ListingGrid } from "@/components/listing/listing-card";
-import { MOCK_LISTINGS } from "@/lib/mock/data";
+import { getListing } from "@/lib/server/marketplace";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Favorit" };
 
-// ponytail: favorit statis mock — swap ke tabel favorites saat backend nyala
-const FAVORITE_IDS = ["lst-001", "lst-004", "lst-006", "lst-009"];
-
-export default function FavoritesPage() {
-  const favorites = MOCK_LISTINGS.filter((l) => FAVORITE_IDS.includes(l.id));
-
+export default async function FavoritesPage() {
+  const db = await createClient();
+  const {
+    data: { user },
+  } = await db.auth.getUser();
+  if (!user) redirect("/login?next=/favorites");
+  const { data } = await db
+    .from("favorites")
+    .select("listing_id")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+  const favorites = (
+    await Promise.all((data ?? []).map((row) => getListing(row.listing_id)))
+  ).filter((item) => item !== null);
   return (
     <div className="space-y-4">
       <div>
@@ -23,14 +32,13 @@ export default function FavoritesPage() {
           {favorites.length} barang tersimpan
         </p>
       </div>
-
-      {favorites.length > 0 ? (
+      {favorites.length ? (
         <ListingGrid listings={favorites} />
       ) : (
         <EmptyState
           icon={<Heart className="size-8" />}
           title="Belum ada barang favorit"
-          description="Tap ikon hati di barang yang menarik biar gak hilang pas dicari lagi."
+          description="Simpan barang dari halaman detail agar mudah ditemukan lagi."
           actionLabel="Cari barang sekitar"
           actionHref="/search"
         />

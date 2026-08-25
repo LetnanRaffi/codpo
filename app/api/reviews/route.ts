@@ -1,4 +1,4 @@
-import { handleError, ok, parseBody } from "@/lib/server/api";
+import { ApiError, handleError, ok, parseBody } from "@/lib/server/api";
 import { requireUser } from "@/lib/server/auth";
 import { rateLimit } from "@/lib/server/ratelimit";
 import { reviewCreateSchema } from "@/lib/server/schemas";
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
       .eq("id", body.transaction_id)
       .single();
     if (!trx || trx.status !== "completed") {
-      return ok({ error: "transaksi tidak ditemukan / belum selesai" }, 404);
+      throw new ApiError(404, "transaksi tidak ditemukan / belum selesai");
     }
     const reviewee =
       trx.buyer_id === user.id
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
         : trx.seller_id === user.id
           ? trx.buyer_id
           : null;
-    if (!reviewee) return ok({ error: "kamu bukan pihak transaksi ini" }, 403);
+    if (!reviewee) throw new ApiError(403, "kamu bukan pihak transaksi ini");
 
     const { data, error } = await db
       .from("reviews")

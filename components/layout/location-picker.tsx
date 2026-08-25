@@ -11,10 +11,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import { RADIUS_OPTIONS_KM } from "@/lib/mock/data";
+import { RADIUS_OPTIONS_KM } from "@/lib/config";
 
 export function LocationPicker() {
-  const { radiusKm, setRadiusKm } = useRadius();
+  const { radiusKm, setRadiusKm, position, setPosition } = useRadius();
   const [open, setOpen] = useState(false);
 
   return (
@@ -24,10 +24,12 @@ export function LocationPicker() {
           variant="outline"
           size="sm"
           className="shrink-0 gap-1.5 rounded-full font-mono text-xs"
-          aria-label={`Lokasi Bekasi Utara, radius ${radiusKm} km — ubah radius`}
+          aria-label={`Lokasi ${position ? "aktif" : "belum aktif"}, radius ${radiusKm} km — ubah radius`}
         >
           <MapPin className="size-3.5 text-bu-red" />
-          <span className="hidden sm:inline">Bekasi Utara</span>
+          <span className="hidden sm:inline">
+            {position ? "Lokasi saya" : "Pilih lokasi"}
+          </span>
           <span>{radiusKm} km</span>
         </Button>
       </PopoverTrigger>
@@ -52,9 +54,21 @@ export function LocationPicker() {
           </button>
         ))}
         <Separator className="my-1.5" />
-        <p className="px-2 pb-1 text-xs leading-relaxed text-muted-foreground">
-          Deteksi lokasi otomatis menyusul di fase GPS.
-        </p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start"
+          onClick={() => {
+            navigator.geolocation?.getCurrentPosition(({ coords }) => {
+              setPosition({ lat: coords.latitude, lng: coords.longitude });
+              setOpen(false);
+            });
+          }}
+        >
+          <MapPin className="size-3.5" />{" "}
+          {position ? "Perbarui lokasi" : "Gunakan lokasi perangkat"}
+        </Button>
       </PopoverContent>
     </Popover>
   );

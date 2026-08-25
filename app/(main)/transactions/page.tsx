@@ -9,16 +9,34 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 
+import { useAuth } from "@/components/providers/auth-provider";
+import { CodSessionActions } from "@/components/listing/cod-session-actions";
+import { ReviewDialog } from "@/components/listing/review-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatIDR } from "@/lib/format";
-import { BUYER_TRANSACTIONS } from "@/lib/mock/seller";
-import { MOCK_LISTINGS } from "@/lib/mock/data";
-import type { BuyerTransactionRow } from "@/lib/mock/seller";
+import { apiFetch } from "@/lib/client/api";
 import { cn } from "@/lib/utils";
+
+interface BuyerTransactionRow {
+  id: string;
+  listing_id: string;
+  listing_title: string;
+  other_user_name: string;
+  agreed_price: number;
+  status: string;
+  created_at: string;
+  cod_sessions: {
+    id: string;
+    state: string;
+    scheduled_at: string;
+    meeting_point: string;
+  } | null;
+}
 
 const TABS = [
   { key: "aktif", label: "COD Aktif" },
@@ -31,7 +49,7 @@ type TabKey = (typeof TABS)[number]["key"];
 const STEPS = ["Deal", "Terjadwal", "OTW", "Sampai", "Selesai"] as const;
 
 function stepIndex(row: BuyerTransactionRow): number {
-  switch (row.cod_status) {
+  switch (row.cod_sessions?.state) {
     case "scheduled":
       return 1;
     case "otw":
@@ -47,7 +65,7 @@ function stepIndex(row: BuyerTransactionRow): number {
 
 function CodStepper({ row }: { row: BuyerTransactionRow }) {
   const current = stepIndex(row);
-  const done = row.cod_status === "completed";
+  const done = row.cod_sessions?.state === "completed";
 
   return (
     <ol aria-label="Status COD" className="flex items-center gap-1">
@@ -80,8 +98,14 @@ function CodStepper({ row }: { row: BuyerTransactionRow }) {
   );
 }
 
-function TransactionCard({ row }: { row: BuyerTransactionRow }) {
-  const listing = MOCK_LISTINGS.find((l) => l.id === row.listing_id);
+function TransactionCard({
+  row,
+  onUpdated,
+}: {
+  row: BuyerTransactionRow;
+  onUpdated: () => void;
+}) {
+  const codStatus = row.cod_sessions?.state ?? "accepted";
 
   return (
     <div className="rounded-xl border bg-card p-4">
@@ -92,17 +116,17 @@ function TransactionCard({ row }: { row: BuyerTransactionRow }) {
           tabIndex={-1}
           className="flex size-16 shrink-0 items-center justify-center rounded-lg bg-paper-soft font-display text-2xl font-bold text-ink/30"
         >
-          {(listing?.title ?? "?").charAt(0)}
+          {row.listing_title.charAt(0)}
         </Link>
         <div className="min-w-0 flex-1">
           <Link
             href={`/listing/${row.listing_id}`}
             className="line-clamp-1 text-sm font-semibold hover:underline"
           >
-            {listing?.title ?? "Listing"}
+            {row.listing_title}
           </Link>
           <p className="text-xs text-muted-foreground">
-            Seller: {row.seller_name}
+            Seller: {row.other_user_name}
           </p>
           <p className="mt-0.5 font-display text-lg font-bold tracking-wide">
             {formatIDR(row.agreed_price)}
@@ -114,29 +138,33 @@ function TransactionCard({ row }: { row: BuyerTransactionRow }) {
             "h-fit shrink-0 rounded-full capitalize",
             row.status === "completed" && "bg-trust-green/15 text-trust-green",
             row.status === "cancelled" && "opacity-60",
-            (row.status === "item_check" || row.cod_status === "otw") &&
+            (row.status === "item_check" || codStatus === "otw") &&
               "bg-bu-red/10 text-bu-red-deep",
           )}
         >
-          {row.cod_status === "otw"
+          {codStatus === "otw"
             ? "Seller OTW"
-            : row.cod_status === "arrived"
+            : codStatus === "arrived"
               ? "Sampai lokasi"
-              : row.cod_status}
+              : codStatus}
         </Badge>
       </div>
 
-      {row.cod_status !== "cancelled" && row.cod_status !== "completed" ? (
+      {codStatus !== "cancelled" && codStatus !== "completed" ? (
         <>
           <CodStepper row={row} />
           <div className="mt-3 space-y-1 rounded-lg bg-paper-soft/70 px-3 py-2 font-mono text-xs text-muted-foreground">
             <p className="flex items-center gap-1.5">
               <MapPin className="size-3.5 shrink-0 text-bu-red" aria-hidden />
-              <span className="truncate">{row.meeting_point}</span>
+              <span className="truncate">
+                {row.cod_sessions?.meeting_point}
+              </span>
             </p>
             <p className="flex items-center gap-1.5 tabular-nums">
               <Navigation className="size-3.5 shrink-0" aria-hidden />
-              {new Date(`${row.date}T${row.time}`).toLocaleString("id-ID", {
+              {new Date(
+                row.cod_sessions?.scheduled_at ?? row.created_at,
+              ).toLocaleString("id-ID", {
                 weekday: "short",
                 day: "numeric",
                 month: "short",
@@ -156,23 +184,20 @@ function TransactionCard({ row }: { row: BuyerTransactionRow }) {
                 <MessageSquare aria-hidden /> Chat seller
               </Link>
             </Button>
-            {row.status === "item_check" ? (
-              <Button size="sm" className="flex-1 rounded-full font-bold">
-                Selesaikan Transaksi
-              </Button>
-            ) : row.cod_status === "otw" ? (
-              <Button
-                size="sm"
-                disabled
-                className="flex-1 rounded-full font-bold"
-              >
-                📍 Live tracking menyusul
-              </Button>
-            ) : null}
           </div>
+          {row.cod_sessions?.id && (
+            <div className="mt-3">
+              <CodSessionActions
+                sessionId={row.cod_sessions.id}
+                state={codStatus}
+                role="buyer"
+                onUpdated={onUpdated}
+              />
+            </div>
+          )}
         </>
       ) : (
-        <p
+        <div
           className={cn(
             "mt-3 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs",
             row.status === "completed"
@@ -181,26 +206,54 @@ function TransactionCard({ row }: { row: BuyerTransactionRow }) {
           )}
         >
           {row.status === "completed" ? (
-            <>
-              <CheckCircle2 className="size-3.5 shrink-0" aria-hidden />{" "}
-              Transaksi selesai — jangan lupa kasih rating
-            </>
+            <div className="flex w-full items-center justify-between gap-2">
+              <span>
+                <CheckCircle2 className="size-3.5 shrink-0" aria-hidden />{" "}
+                Transaksi selesai — jangan lupa kasih rating
+              </span>
+              <ReviewDialog transactionId={row.id} />
+            </div>
           ) : (
             <>
               <XCircle className="size-3.5 shrink-0" aria-hidden /> COD
               dibatalkan — uang gak berpindah, tenang.
             </>
           )}
-        </p>
+        </div>
       )}
     </div>
   );
 }
 
 export default function TransactionsPage() {
+  const router = useRouter();
   const [tab, setTab] = useState<TabKey>("aktif");
+  const [allRows, setAllRows] = useState<BuyerTransactionRow[]>([]);
+  const { user, loading } = useAuth();
+  const load = useCallback(
+    () =>
+      apiFetch<{ items: BuyerTransactionRow[] }>("/api/transactions")
+        .then((data) => setAllRows(data.items))
+        .catch(() => setAllRows([])),
+    [],
+  );
+  useEffect(() => {
+    if (loading) return;
+    if (!user) {
+      router.replace("/login?next=/transactions");
+      return;
+    }
+    void load();
+  }, [load, loading, router, user]);
 
-  const rows = BUYER_TRANSACTIONS.filter((r) => {
+  if (loading || !user)
+    return (
+      <p className="py-16 text-center text-sm text-muted-foreground">
+        Memuat transaksi…
+      </p>
+    );
+
+  const rows = allRows.filter((r) => {
     if (tab === "aktif") return !["completed", "cancelled"].includes(r.status);
     if (tab === "selesai") return r.status === "completed";
     return r.status === "cancelled";
@@ -213,7 +266,7 @@ export default function TransactionsPage() {
           Transaksi
         </h1>
         <p className="font-mono text-xs text-muted-foreground">
-          Semua COD kamu — data demo
+          Semua COD kamu
         </p>
       </div>
 
@@ -243,7 +296,7 @@ export default function TransactionsPage() {
       {rows.length > 0 ? (
         <div className="grid gap-3 lg:grid-cols-2">
           {rows.map((row) => (
-            <TransactionCard key={row.id} row={row} />
+            <TransactionCard key={row.id} row={row} onUpdated={load} />
           ))}
         </div>
       ) : (

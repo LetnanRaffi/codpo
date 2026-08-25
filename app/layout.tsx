@@ -5,7 +5,7 @@ import {
   Plus_Jakarta_Sans,
 } from "next/font/google";
 import { SiteFooter } from "@/components/layout/site-footer";
-import { MockAuthProvider } from "@/components/providers/mock-auth-provider";
+import { AuthProvider } from "@/components/providers/auth-provider";
 import { RadiusProvider } from "@/components/providers/radius-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
@@ -51,10 +51,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           enableSystem={false}
           disableTransitionOnChange
         >
-          <MockAuthProvider>
+          <AuthProvider>
             <RadiusProvider>{children}</RadiusProvider>
             <SiteFooter />
-          </MockAuthProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

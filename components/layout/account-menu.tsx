@@ -4,7 +4,7 @@ import { Moon, Sun, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 
-import { useMockAuth } from "@/components/providers/mock-auth-provider";
+import { useAuth } from "@/components/providers/auth-provider";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,7 +43,8 @@ function ThemeMenuItem() {
 }
 
 export function AccountMenu() {
-  const { user, toggle } = useMockAuth();
+  const { user, profile, loading, signOut, setMode } = useAuth();
+  const name = profile?.name ?? user?.email ?? "Pengguna";
 
   return (
     <DropdownMenu>
@@ -55,9 +56,9 @@ export function AccountMenu() {
           aria-label="Menu akun"
         >
           <Avatar className="size-8">
-            <AvatarImage src={user?.avatar_url ?? undefined} alt="" />
+            <AvatarImage alt="" />
             <AvatarFallback className="bg-secondary text-xs font-semibold">
-              {user ? initials(user.name) : <UserRound className="size-4" />}
+              {user ? initials(name) : <UserRound className="size-4" />}
             </AvatarFallback>
           </Avatar>
         </Button>
@@ -66,14 +67,22 @@ export function AccountMenu() {
         {user ? (
           <>
             <DropdownMenuLabel className="flex flex-col">
-              <span>{user.name}</span>
+              <span>{name}</span>
               <span className="text-xs font-normal text-muted-foreground capitalize">
-                Mode {user.mode === "buyer" ? "pembeli" : "penjual"}
+                Mode {profile?.mode === "seller" ? "penjual" : "pembeli"}
               </span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link href="/seller/dashboard">Dashboard Seller</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                void setMode(profile?.mode === "seller" ? "buyer" : "seller");
+              }}
+            >
+              Ganti ke mode {profile?.mode === "seller" ? "pembeli" : "penjual"}
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/profile">
@@ -83,7 +92,9 @@ export function AccountMenu() {
             <DropdownMenuSeparator />
             <ThemeMenuItem />
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={toggle}>Keluar</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void signOut()}>
+              Keluar
+            </DropdownMenuItem>
           </>
         ) : (
           <>
@@ -98,12 +109,7 @@ export function AccountMenu() {
             <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuItem
-          onSelect={toggle}
-          className="text-muted-foreground data-[highlighted]:text-foreground"
-        >
-          [DEV] {user ? "Keluar dari test user" : "Masuk sebagai test user"}
-        </DropdownMenuItem>
+        {loading && <DropdownMenuItem disabled>Memuat sesi…</DropdownMenuItem>}
       </DropdownMenuContent>
     </DropdownMenu>
   );

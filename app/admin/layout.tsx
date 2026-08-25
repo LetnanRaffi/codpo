@@ -5,12 +5,14 @@ import Link from "next/link";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { requireAdminPage } from "@/lib/server/admin-page";
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  await requireAdminPage();
   return (
     <div className="min-h-dvh">
       <header className="border-b bg-card">

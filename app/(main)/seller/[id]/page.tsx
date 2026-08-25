@@ -8,143 +8,135 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-
 import { EmptyState } from "@/components/empty-state";
 import { ListingGrid } from "@/components/listing/listing-card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { MOCK_LISTINGS } from "@/lib/mock/data";
+import { listingFromRow } from "@/lib/server/marketplace";
+import { createClient } from "@/lib/supabase/server";
 
-interface SellerPageProps {
+interface Props {
   params: Promise<{ id: string }>;
 }
-
-function uniqueSellers() {
-  const seen = new Set<string>();
-  return MOCK_LISTINGS.filter((l) => {
-    if (seen.has(l.seller.id)) return false;
-    seen.add(l.seller.id);
-    return true;
-  }).map((l) => ({ id: l.seller.id }));
-}
-
-export function generateStaticParams() {
-  return uniqueSellers();
-}
-
-export async function generateMetadata({
-  params,
-}: SellerPageProps): Promise<Metadata> {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const seller = MOCK_LISTINGS.find((l) => l.seller.id === id)?.seller;
-  if (!seller) notFound();
-  return { title: seller.name };
+  const db = await createClient();
+  const { data } = await db
+    .from("profiles")
+    .select("name")
+    .eq("id", id)
+    .maybeSingle();
+  return { title: data?.name ?? "Seller" };
 }
-
-function initials(name: string) {
-  return name
+export default async function SellerPage({ params }: Props) {
+  const { id } = await params;
+  const db = await createClient();
+  const [{ data: profile }, { data: reputation }, { data: rows }] =
+    await Promise.all([
+      db
+        .from("profiles")
+        .select("id,name,verified,created_at")
+        .eq("id", id)
+        .maybeSingle(),
+      db
+        .from("user_reputation")
+        .select(
+          "avg_rating,completed_transactions,noshow_count,cancellation_rate_pct",
+        )
+        .eq("user_id", id)
+        .maybeSingle(),
+      db
+        .from("listing_public")
+        .select("*")
+        .eq("seller_id", id)
+        .order("created_at", { ascending: false }),
+    ]);
+  if (!profile) notFound();
+  const rating = Number(reputation?.avg_rating ?? 0);
+  const seller = {
+    id,
+    name: profile.name,
+    avatar_url: null,
+    rating,
+    completed_transactions: Number(reputation?.completed_transactions ?? 0),
+    verified: profile.verified,
+    member_since: profile.created_at.slice(0, 7),
+  };
+  const listings = (rows ?? []).map((row) => listingFromRow(row, { seller }));
+  const initials = profile.name
     .split(" ")
-    .map((p) => p[0])
+    .map((part: string) => part[0])
     .slice(0, 2)
     .join("")
     .toUpperCase();
-}
-
-export default async function SellerProfilePage({ params }: SellerPageProps) {
-  const { id } = await params;
-  const listings = MOCK_LISTINGS.filter(
-    (l) => l.seller.id === id && l.status === "active",
-  );
-  const seller = listings[0]?.seller;
-  if (!seller) notFound();
-
   return (
     <div className="space-y-6">
-      {/* Kartu profil publik — PRD §23 */}
       <section className="flex flex-col gap-4 rounded-xl border bg-card p-5 sm:flex-row sm:items-center">
-        <Avatar className="size-20 shrink-0">
+        <Avatar className="size-20">
           <AvatarFallback className="bg-secondary text-2xl font-bold">
-            {initials(seller.name)}
+            {initials}
           </AvatarFallback>
         </Avatar>
-        <div className="min-w-0 flex-1 space-y-1">
-          <h1 className="flex items-center gap-1.5 font-display text-2xl font-bold tracking-wide uppercase md:text-3xl">
-            {seller.name}
-            {seller.verified && (
-              <BadgeCheck
-                className="size-5 shrink-0 text-trust-green"
-                aria-label="Seller terverifikasi"
-              />
+        <div className="min-w-0 flex-1">
+          <h1 className="flex items-center gap-1.5 font-display text-3xl font-bold uppercase">
+            {profile.name}
+            {profile.verified && (
+              <BadgeCheck className="size-5 text-trust-green" />
             )}
           </h1>
-          <p className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
-            <MapPin className="size-3.5" aria-hidden />
-            {listings[0]?.area_label} · member sejak {seller.member_since}
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <MapPin className="size-3.5" />
+            {listings[0]?.area_label ?? "Indonesia"} · member sejak{" "}
+            {seller.member_since}
           </p>
         </div>
-        <Button variant="outline" className="rounded-full font-bold" asChild>
-          <a href={`/chat?listing=${listings[0]?.id ?? ""}`}>Chat Seller</a>
-        </Button>
+        {listings[0] && (
+          <Button variant="outline" className="rounded-full" asChild>
+            <a href={`/chat?listing=${listings[0].id}`}>Chat Seller</a>
+          </Button>
+        )}
       </section>
-
-      {/* Reputasi PRD §37 */}
       <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {[
           {
             icon: Star,
             label: "Rating",
-            value: seller.rating.toLocaleString("id-ID"),
+            value: rating.toLocaleString("id-ID"),
           },
           {
             icon: Package,
             label: "Transaksi selesai",
-            value: seller.completed_transactions.toLocaleString("id-ID"),
+            value: seller.completed_transactions,
           },
-          { icon: Clock3, label: "Respon chat", value: "~15 mnt" },
-          { icon: ShieldCheck, label: "Cancel rate", value: "3%" },
+          { icon: Clock3, label: "Listing aktif", value: listings.length },
+          {
+            icon: ShieldCheck,
+            label: "No-show",
+            value: Number(reputation?.noshow_count ?? 0),
+          },
         ].map(({ icon: Icon, label, value }) => (
-          <div
-            key={label}
-            className="rounded-xl border bg-card px-3 py-3.5 text-center"
-          >
-            <Icon
-              className="mx-auto size-4 text-muted-foreground"
-              aria-hidden
-            />
-            <p className="mt-1.5 font-display text-xl leading-none font-bold tabular-nums">
-              {value}
-            </p>
-            <p className="mt-1 text-[10px] leading-tight text-muted-foreground">
-              {label}
-            </p>
+          <div key={label} className="rounded-xl border p-3 text-center">
+            <Icon className="mx-auto size-4 text-muted-foreground" />
+            <p className="mt-1 font-display text-xl font-bold">{value}</p>
+            <p className="text-[10px] text-muted-foreground">{label}</p>
           </div>
         ))}
       </section>
-
-      {/* Listing aktif */}
       <section className="space-y-3">
-        <h2 className="font-display text-xl font-bold tracking-wide uppercase">
-          Barang Dijual{" "}
-          <span className="font-mono text-sm font-normal text-muted-foreground normal-case">
-            ({listings.length})
-          </span>
+        <h2 className="font-display text-xl font-bold uppercase">
+          Barang Dijual ({listings.length})
         </h2>
-        {listings.length > 0 ? (
+        {listings.length ? (
           <ListingGrid listings={listings} />
         ) : (
           <EmptyState
             title="Belum ada barang aktif"
-            description="Cek lagi nanti, atau lihat barang BU lain di sekitarmu."
+            description="Cek lagi nanti."
             actionLabel="Lihat BU Terdekat"
             actionHref="/search?bu=1"
           />
         )}
       </section>
-
-      <p className="text-center text-xs text-muted-foreground">
-        Alamat lengkap &amp; lokasi presisi gak ditampilkan — titik COD cuma
-        dibagi setelah deal.
-      </p>
     </div>
   );
 }

@@ -2,8 +2,11 @@
 
 import { CheckCircle2 } from "lucide-react";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
+import { useAuth } from "@/components/providers/auth-provider";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/client/api";
 import {
   Dialog,
   DialogContent,
@@ -19,13 +22,49 @@ import { Textarea } from "@/components/ui/textarea";
 
 export function CodRequestDialog({
   listingTitle,
+  listingId,
+  conversationId,
   trigger,
 }: {
   listingTitle: string;
+  listingId: string;
+  conversationId?: string;
   trigger: React.ReactNode;
 }) {
   const [sent, setSent] = useState(false);
   const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const { user } = useAuth();
+  const router = useRouter();
+
+  async function submit(form: HTMLFormElement) {
+    if (!user) {
+      router.push(`/login?next=/listing/${listingId}`);
+      return;
+    }
+    const data = new FormData(form);
+    setPending(true);
+    setError("");
+    try {
+      await apiFetch("/api/cod/requests", {
+        method: "POST",
+        body: JSON.stringify({
+          listing_id: listingId,
+          conversation_id: conversationId,
+          preferred_date: data.get("date"),
+          preferred_time: data.get("time"),
+          meeting_point: data.get("place"),
+          note: data.get("note") || undefined,
+        }),
+      });
+      setSent(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Gagal mengajukan COD");
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
     <Dialog
@@ -67,7 +106,7 @@ export function CodRequestDialog({
               className="space-y-4"
               onSubmit={(e) => {
                 e.preventDefault();
-                setSent(true);
+                void submit(e.currentTarget);
               }}
             >
               <div className="grid grid-cols-2 gap-3">
@@ -75,6 +114,7 @@ export function CodRequestDialog({
                   <Label htmlFor="cod-date">Tanggal</Label>
                   <Input
                     id="cod-date"
+                    name="date"
                     type="date"
                     required
                     className="rounded-lg"
@@ -84,6 +124,7 @@ export function CodRequestDialog({
                   <Label htmlFor="cod-time">Jam</Label>
                   <Input
                     id="cod-time"
+                    name="time"
                     type="time"
                     required
                     className="rounded-lg"
@@ -94,6 +135,7 @@ export function CodRequestDialog({
                 <Label htmlFor="cod-place">Titik temu</Label>
                 <Input
                   id="cod-place"
+                  name="place"
                   required
                   placeholder="Contoh: Alun-alun Bekasi, depan McDonald's"
                   className="rounded-lg"
@@ -103,19 +145,26 @@ export function CodRequestDialog({
                 <Label htmlFor="cod-note">Catatan (opsional)</Label>
                 <Textarea
                   id="cod-note"
+                  name="note"
                   rows={2}
                   placeholder="Contoh: Gue bawa uang pas ya"
                   className="rounded-lg"
                 />
               </div>
             </form>
+            {error && (
+              <p role="alert" className="text-sm font-medium text-bu-red-deep">
+                {error}
+              </p>
+            )}
             <DialogFooter>
               <Button
                 type="submit"
                 form="cod-request-form"
+                disabled={pending}
                 className="w-full rounded-full sm:w-auto"
               >
-                Kirim ajukan COD
+                {pending ? "Mengirim…" : "Kirim ajukan COD"}
               </Button>
             </DialogFooter>
           </>

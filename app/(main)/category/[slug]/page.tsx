@@ -5,32 +5,28 @@ import { notFound } from "next/navigation";
 
 import { EmptyState } from "@/components/empty-state";
 import { ListingGrid } from "@/components/listing/listing-card";
-import { CATEGORIES, MOCK_LISTINGS } from "@/lib/mock/data";
+import { getCategories, searchListings } from "@/lib/server/marketplace";
 
 interface CategoryPageProps {
   params: Promise<{ slug: string }>;
-}
-
-export function generateStaticParams() {
-  return CATEGORIES.map((c) => ({ slug: c.slug }));
 }
 
 export async function generateMetadata({
   params,
 }: CategoryPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const category = CATEGORIES.find((c) => c.slug === slug);
+  const categories = await getCategories();
+  const category = categories.find((c) => c.slug === slug);
   return { title: category ? category.name : "Kategori" };
 }
 
 export default async function CategoryPage({ params }: CategoryPageProps) {
   const { slug } = await params;
-  const category = CATEGORIES.find((c) => c.slug === slug);
+  const categories = await getCategories();
+  const category = categories.find((c) => c.slug === slug);
   if (!category) notFound();
 
-  const listings = MOCK_LISTINGS.filter(
-    (l) => l.category_slug === slug && l.status === "active",
-  );
+  const listings = await searchListings({ category: slug, limit: 50 });
 
   return (
     <div className="space-y-5">

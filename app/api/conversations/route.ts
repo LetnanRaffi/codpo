@@ -26,19 +26,21 @@ export async function GET(req: Request) {
     const items = await Promise.all(
       (convs ?? []).map(async (c) => {
         const otherId = c.buyer_id === user.id ? c.seller_id : c.buyer_id;
-        const [{ data: other }, { data: unread }] = await Promise.all([
+        const [{ data: other }, { data: latest }] = await Promise.all([
           db.from("profiles").select("name").eq("id", otherId).maybeSingle(),
           db
             .from("messages")
-            .select("id", { count: "exact", head: true })
+            .select("body,type")
             .eq("conversation_id", c.id)
-            .neq("sender_id", user.id)
-            .gt("created_at", c.last_message_at ?? "1970-01-01"),
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
         ]);
         return {
           ...c,
           other_user_name: other?.name ?? "Pengguna",
-          unread_count: unread ?? 0,
+          last_message: latest?.body || (latest?.type ? "Lampiran" : ""),
+          unread_count: 0,
         };
       }),
     );

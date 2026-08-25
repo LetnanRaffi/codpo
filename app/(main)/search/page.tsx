@@ -3,6 +3,7 @@ import { Suspense } from "react";
 
 import { ListingCardSkeleton } from "@/components/listing/listing-card";
 import { SearchClient } from "@/app/(main)/search/search-client";
+import { getCategories } from "@/lib/server/marketplace";
 
 export const metadata: Metadata = { title: "Cari Barang" };
 
@@ -16,10 +17,11 @@ function SearchFallback() {
   );
 }
 
-export default function SearchPage() {
+export default async function SearchPage() {
+  const categories = await getCategories();
   return (
     <Suspense fallback={<SearchFallback />}>
-      <SearchClient />
+      <SearchClient categories={categories} />
     </Suspense>
   );
 }

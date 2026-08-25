@@ -2,22 +2,41 @@
 
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
-import { MOCK_CONVERSATIONS } from "@/lib/mock/chat";
+import { useAuth } from "@/components/providers/auth-provider";
+import { apiFetch } from "@/lib/client/api";
 import { timeAgo } from "@/lib/format";
-import { MOCK_LISTINGS } from "@/lib/mock/data";
 import { cn } from "@/lib/utils";
 
-function participantName(participantId: string) {
-  return (
-    MOCK_LISTINGS.find((l) => l.seller.id === participantId)?.seller.name ??
-    "Seller"
-  );
+interface InboxItem {
+  id: string;
+  listing_id: string;
+  last_message_at: string | null;
+  last_message: string;
+  created_at: string;
+  other_user_name: string;
+  unread_count: number;
+  listings: { title?: string } | null;
 }
 
 export function ConversationList({ className }: { className?: string }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading } = useAuth();
+  const [items, setItems] = useState<InboxItem[]>([]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) {
+      router.replace(`/login?next=${pathname}`);
+      return;
+    }
+    apiFetch<{ items: InboxItem[] }>("/api/conversations")
+      .then((data) => setItems(data.items))
+      .catch(() => setItems([]));
+  }, [loading, pathname, router, user]);
 
   return (
     <aside className={cn("flex min-h-0 flex-col", className)}>
@@ -27,8 +46,8 @@ export function ConversationList({ className }: { className?: string }) {
         </h1>
       </div>
       <ul className="min-h-0 flex-1 divide-y overflow-y-auto">
-        {MOCK_CONVERSATIONS.map((cnv) => {
-          const listing = MOCK_LISTINGS.find((l) => l.id === cnv.listing_id);
+        {items.map((cnv) => {
+          const title = cnv.listings?.title ?? "Listing";
           const active = pathname === `/chat/${cnv.id}`;
           return (
             <li key={cnv.id}>
@@ -44,7 +63,7 @@ export function ConversationList({ className }: { className?: string }) {
                   aria-hidden
                   className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-paper-soft font-display text-xl font-bold text-ink/30"
                 >
-                  {(listing?.title ?? "?").charAt(0)}
+                  {title.charAt(0)}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
@@ -54,14 +73,14 @@ export function ConversationList({ className }: { className?: string }) {
                         cnv.unread_count > 0 ? "font-bold" : "font-semibold",
                       )}
                     >
-                      {participantName(cnv.participant_id)}
+                      {cnv.other_user_name}
                     </p>
                     <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                      {timeAgo(cnv.updated_at)}
+                      {timeAgo(cnv.last_message_at ?? cnv.created_at)}
                     </span>
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
-                    {listing?.title}
+                    {title}
                   </p>
                   <p
                     className={cn(
@@ -71,7 +90,7 @@ export function ConversationList({ className }: { className?: string }) {
                         : "text-muted-foreground",
                     )}
                   >
-                    {cnv.last_message}
+                    {cnv.last_message || "Mulai percakapan"}
                   </p>
                 </div>
                 {cnv.unread_count > 0 && (

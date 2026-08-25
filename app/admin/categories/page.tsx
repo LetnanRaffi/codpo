@@ -1,125 +1,121 @@
 "use client";
-
 import { Plus } from "lucide-react";
-import { useState } from "react";
-
+import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CATEGORIES } from "@/lib/mock/data";
-
-export default function AdminCategoriesPage() {
-  const [cats, setCats] = useState(
-    CATEGORIES.map((c) => ({ ...c, disabled: false })),
+import { apiFetch } from "@/lib/client/api";
+interface CategoryRow {
+  id: string;
+  slug: string;
+  name: string;
+  icon: string | null;
+  sort_order: number;
+  active: boolean;
+}
+export default function Page() {
+  const [rows, setRows] = useState<CategoryRow[]>([]);
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+  const load = useCallback(
+    () =>
+      apiFetch<{ items: CategoryRow[] }>("/api/admin/categories")
+        .then((data) => setRows(data.items))
+        .catch((cause) => setError(cause.message)),
+    [],
   );
-  const [newName, setNewName] = useState("");
-
-  function slugify(name: string) {
-    return name
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const save = async (row: Omit<CategoryRow, "id">) => {
+    setError("");
+    try {
+      await apiFetch("/api/admin/categories", {
+        method: "POST",
+        body: JSON.stringify(row),
+      });
+      setName("");
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Gagal");
+    }
+  };
+  const slugify = (value: string) =>
+    value
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
-  }
-
-  function addCategory() {
-    const name = newName.trim();
-    if (!name) return;
-    if (cats.some((c) => c.slug === slugify(name))) return;
-    setCats((c) => [
-      ...c,
-      {
-        id: `cat-local-${Date.now()}`,
-        slug: slugify(name),
-        name,
-        disabled: false,
-      },
-    ]);
-    setNewName("");
-  }
-
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-display text-2xl font-bold tracking-wide uppercase">
+        <h1 className="font-display text-2xl font-bold uppercase">
           Categories
         </h1>
         <p className="font-mono text-xs text-muted-foreground">
-          Kategori configurable — perubahan di halaman ini demo lokal saja
+          Kategori database yang dipakai marketplace
         </p>
       </div>
-
       <form
         className="flex max-w-md gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          addCategory();
+        onSubmit={(event) => {
+          event.preventDefault();
+          const clean = name.trim();
+          if (clean)
+            void save({
+              slug: slugify(clean),
+              name: clean,
+              icon: null,
+              sort_order: rows.length + 1,
+              active: true,
+            });
         }}
       >
         <Input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
           placeholder="Nama kategori baru"
-          aria-label="Nama kategori baru"
           className="rounded-full"
         />
-        <Button
-          type="submit"
-          className="rounded-full"
-          disabled={!newName.trim()}
-        >
-          <Plus aria-hidden /> Tambah
+        <Button className="rounded-full" disabled={!name.trim()}>
+          <Plus /> Tambah
         </Button>
       </form>
-
+      {error && <p className="text-sm text-bu-red-deep">{error}</p>}
       <div className="overflow-x-auto rounded-xl border bg-card">
         <table className="w-full min-w-[560px] text-sm">
           <thead>
-            <tr className="border-b text-left text-xs tracking-wide text-muted-foreground uppercase">
-              <th className="px-4 py-3 font-medium">Kategori</th>
-              <th className="px-4 py-3 font-medium">Slug</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 text-right font-medium">Aksi</th>
+            <tr className="border-b text-left text-xs text-muted-foreground uppercase">
+              <th className="px-4 py-3">Kategori</th>
+              <th className="px-4 py-3">Slug</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3 text-right">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y">
-            {cats.map((c) => (
-              <tr
-                key={c.id}
-                className={`hover:bg-accent/50 ${c.disabled ? "opacity-50" : ""}`}
-              >
-                <td className="px-4 py-3 font-medium">{c.name}</td>
-                <td className="px-4 py-3 font-mono text-xs">{c.slug}</td>
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <td className="px-4 py-3 font-medium">{row.name}</td>
+                <td className="px-4 py-3 font-mono text-xs">{row.slug}</td>
                 <td className="px-4 py-3">
-                  {c.disabled ? (
-                    <Badge
-                      variant="secondary"
-                      className="rounded-full opacity-70"
-                    >
-                      Nonaktif
-                    </Badge>
-                  ) : (
-                    <Badge
-                      variant="secondary"
-                      className="rounded-full bg-trust-green/15 text-trust-green"
-                    >
-                      Aktif
-                    </Badge>
-                  )}
+                  <Badge variant="secondary" className="rounded-full">
+                    {row.active ? "Aktif" : "Nonaktif"}
+                  </Badge>
                 </td>
                 <td className="px-4 py-3 text-right">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 rounded-full"
                     onClick={() =>
-                      setCats((arr) =>
-                        arr.map((x) =>
-                          x.id === c.id ? { ...x, disabled: !x.disabled } : x,
-                        ),
-                      )
+                      void save({
+                        slug: row.slug,
+                        name: row.name,
+                        icon: row.icon,
+                        sort_order: row.sort_order,
+                        active: !row.active,
+                      })
                     }
                   >
-                    {c.disabled ? "Aktifkan" : "Nonaktifkan"}
+                    {row.active ? "Nonaktifkan" : "Aktifkan"}
                   </Button>
                 </td>
               </tr>

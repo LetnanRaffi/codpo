@@ -1,4 +1,4 @@
-import { ApiError, handleError, ok, parseBody } from "@/lib/server/api";
+import { handleError, ok, parseBody } from "@/lib/server/api";
 import { requireUser } from "@/lib/server/auth";
 import { rateLimit } from "@/lib/server/ratelimit";
 import { codRequestDecisionSchema } from "@/lib/server/schemas";
@@ -19,9 +19,6 @@ export async function PATCH(req: Request, ctx: Ctx) {
     await requireUser(req);
     const { id } = await ctx.params;
     const body = await parseBody(req, codRequestDecisionSchema);
-    if (body.action !== "accept" && body.request_id !== id) {
-      throw new ApiError(422, "request_id tidak cocok dengan URL");
-    }
     const db = userClient(req);
 
     switch (body.action) {

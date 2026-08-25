@@ -1,13 +1,14 @@
 "use client";
 
-import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { createClient } from "@/lib/supabase/client";
 
 const loginSchema = z.object({
   email: z.string().email("Email gak valid"),
@@ -16,9 +17,10 @@ const loginSchema = z.object({
 
 export default function LoginPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [success, setSuccess] = useState(false);
+  const [pending, setPending] = useState(false);
+  const router = useRouter();
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.currentTarget));
     const result = loginSchema.safeParse(data);
@@ -31,25 +33,22 @@ export default function LoginPage() {
       return;
     }
     setErrors({});
-    setSuccess(true);
-  }
-
-  if (success) {
-    return (
-      <div className="flex flex-col items-center gap-3 rounded-xl border bg-card px-6 py-12 text-center">
-        <CheckCircle2 className="size-10 text-trust-green" aria-hidden />
-        <p className="font-display text-2xl font-bold tracking-wide uppercase">
-          Login berhasil
-        </p>
-        <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
-          Demo frontend — belum nyambung Supabase Auth. Begitu aktif, kamu
-          langsung masuk ke beranda.
-        </p>
-        <Button className="mt-2 rounded-full" asChild>
-          <Link href="/">Ke beranda</Link>
-        </Button>
-      </div>
-    );
+    setPending(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword(result.data);
+    setPending(false);
+    if (error) {
+      setErrors({
+        form:
+          error.message === "Invalid login credentials"
+            ? "Email atau password salah"
+            : error.message,
+      });
+      return;
+    }
+    const next = new URLSearchParams(window.location.search).get("next");
+    router.replace(next?.startsWith("/") ? next : "/");
+    router.refresh();
   }
 
   return (
@@ -102,10 +101,16 @@ export default function LoginPage() {
         <Button
           type="submit"
           size="lg"
+          disabled={pending}
           className="w-full rounded-full font-bold"
         >
-          Masuk
+          {pending ? "Memeriksa…" : "Masuk"}
         </Button>
+        {errors.form && (
+          <p role="alert" className="text-sm font-medium text-bu-red-deep">
+            {errors.form}
+          </p>
+        )}
       </form>
 
       <p className="mt-5 text-center text-sm text-muted-foreground">

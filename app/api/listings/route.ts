@@ -1,4 +1,4 @@
-import { handleError, ok, parseBody } from "@/lib/server/api";
+import { ApiError, handleError, ok, parseBody } from "@/lib/server/api";
 import { optionalUser, requireUser } from "@/lib/server/auth";
 import { rateLimit } from "@/lib/server/ratelimit";
 import { listingCreateSchema } from "@/lib/server/schemas";
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
       .eq("slug", body.category_slug)
       .eq("active", true)
       .single();
-    if (!category) return ok({ error: "kategori tidak ditemukan" }, 404);
+    if (!category) throw new ApiError(404, "kategori tidak ditemukan");
 
     const { data, error } = await db
       .from("listings")

@@ -1,116 +1,74 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-
+import { AdminReportActions } from "@/components/admin/admin-actions";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ADMIN_REPORTS } from "@/lib/mock/admin";
-
+import { requireAdminPage } from "@/lib/server/admin-page";
 export const metadata: Metadata = { title: "Admin · Reports" };
-
-function statusBadge(status: string) {
-  switch (status) {
-    case "open":
-      return (
-        <Badge
-          variant="secondary"
-          className="rounded-full bg-bu-red/15 text-bu-red-deep"
-        >
-          Baru
-        </Badge>
-      );
-    case "reviewing":
-      return (
-        <Badge
-          variant="secondary"
-          className="rounded-full bg-gold/20 text-foreground"
-        >
-          Ditinjau
-        </Badge>
-      );
-    default:
-      return (
-        <Badge
-          variant="secondary"
-          className="rounded-full bg-trust-green/15 text-trust-green"
-        >
-          Selesai
-        </Badge>
-      );
+export default async function Page() {
+  const { admin } = await requireAdminPage();
+  const { data: reports } = await admin
+    .from("reports")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(300);
+  const reporterIds = [
+    ...new Set((reports ?? []).map((item) => item.reporter_id)),
+  ];
+  const names = new Map<string, string>();
+  if (reporterIds.length) {
+    const { data } = await admin
+      .from("profiles")
+      .select("id,name")
+      .in("id", reporterIds);
+    for (const item of data ?? []) names.set(item.id, item.name);
   }
-}
-
-const REASON_LABEL: Record<string, string> = {
-  scam: "Scam",
-  "fake item": "Barang palsu",
-  "misleading listing": "Listing menyesatkan",
-};
-
-export default function AdminReportsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-display text-2xl font-bold tracking-wide uppercase">
-          Reports
-        </h1>
+        <h1 className="font-display text-2xl font-bold uppercase">Reports</h1>
         <p className="font-mono text-xs text-muted-foreground">
-          Laporan user — data demo
+          Antrean laporan user
         </p>
       </div>
-
       <div className="overflow-x-auto rounded-xl border bg-card">
-        <table className="w-full min-w-[780px] text-sm">
+        <table className="w-full min-w-[760px] text-sm">
           <thead>
-            <tr className="border-b text-left text-xs tracking-wide text-muted-foreground uppercase">
-              <th className="px-4 py-3 font-medium">Target</th>
-              <th className="px-4 py-3 font-medium">Alasan</th>
-              <th className="px-4 py-3 font-medium">Pelapor</th>
-              <th className="px-4 py-3 font-medium">Tanggal</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 text-right font-medium">Aksi</th>
+            <tr className="border-b text-left text-xs text-muted-foreground uppercase">
+              <th className="px-4 py-3">Target</th>
+              <th className="px-4 py-3">Alasan</th>
+              <th className="px-4 py-3">Pelapor</th>
+              <th className="px-4 py-3">Tanggal</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3 text-right">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y">
-            {ADMIN_REPORTS.map((r) => (
-              <tr key={r.id} className="hover:bg-accent/50">
+            {(reports ?? []).map((item) => (
+              <tr key={item.id}>
                 <td className="px-4 py-3">
                   <p className="text-xs text-muted-foreground uppercase">
-                    {r.target}
+                    {item.target_type}
                   </p>
-                  <p className="line-clamp-1 max-w-64 font-medium">
-                    {r.target_ref}
-                  </p>
+                  <p className="font-mono text-xs">{item.target_id}</p>
+                </td>
+                <td className="px-4 py-3 capitalize">
+                  {item.reason.replaceAll("_", " ")}
                 </td>
                 <td className="px-4 py-3">
-                  {REASON_LABEL[r.reason] ?? r.reason}
+                  {names.get(item.reporter_id) ?? "Pengguna"}
                 </td>
-                <td className="px-4 py-3">{r.reporter}</td>
-                <td className="px-4 py-3 font-mono text-xs tabular-nums">
-                  {r.date}
+                <td className="px-4 py-3 font-mono text-xs">
+                  {new Date(item.created_at).toLocaleDateString("id-ID")}
                 </td>
-                <td className="px-4 py-3">{statusBadge(r.status)}</td>
-                <td className="px-4 py-3 text-right whitespace-nowrap">
-                  {r.status !== "resolved" ? (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 rounded-full text-trust-green hover:text-trust-green"
-                        asChild
-                      >
-                        <Link href="#">Resolve</Link>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 rounded-full text-bu-red-deep hover:text-bu-red"
-                        asChild
-                      >
-                        <Link href="#">Hapus konten</Link>
-                      </Button>
-                    </>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
+                <td className="px-4 py-3">
+                  <Badge
+                    variant="secondary"
+                    className="rounded-full capitalize"
+                  >
+                    {item.status}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <AdminReportActions id={item.id} status={item.status} />
                 </td>
               </tr>
             ))}
