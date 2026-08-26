@@ -18,7 +18,7 @@ interface InboxItem {
   created_at: string;
   other_user_name: string;
   unread_count: number;
-  listings: { title?: string } | null;
+  listing_title: string;
 }
 
 export function ConversationList({ className }: { className?: string }) {
@@ -26,6 +26,8 @@ export function ConversationList({ className }: { className?: string }) {
   const router = useRouter();
   const { user, loading } = useAuth();
   const [items, setItems] = useState<InboxItem[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (loading) return;
@@ -35,7 +37,11 @@ export function ConversationList({ className }: { className?: string }) {
     }
     apiFetch<{ items: InboxItem[] }>("/api/conversations")
       .then((data) => setItems(data.items))
-      .catch(() => setItems([]));
+      .catch((cause) => {
+        setItems([]);
+        setError(cause instanceof Error ? cause.message : "Gagal memuat chat");
+      })
+      .finally(() => setDataLoading(false));
   }, [loading, pathname, router, user]);
 
   return (
@@ -46,8 +52,23 @@ export function ConversationList({ className }: { className?: string }) {
         </h1>
       </div>
       <ul className="min-h-0 flex-1 divide-y overflow-y-auto">
+        {dataLoading && (
+          <li className="p-5 text-center text-sm text-muted-foreground">
+            Memuat percakapan…
+          </li>
+        )}
+        {!dataLoading && error && (
+          <li role="alert" className="p-5 text-sm text-bu-red-deep">
+            {error}
+          </li>
+        )}
+        {!dataLoading && !error && items.length === 0 && (
+          <li className="p-5 text-center text-sm text-muted-foreground">
+            Belum ada percakapan.
+          </li>
+        )}
         {items.map((cnv) => {
-          const title = cnv.listings?.title ?? "Listing";
+          const title = cnv.listing_title || "Listing";
           const active = pathname === `/chat/${cnv.id}`;
           return (
             <li key={cnv.id}>

@@ -18,11 +18,21 @@ interface RequestRow {
 export function SellerCodRequests() {
   const [rows, setRows] = useState<RequestRow[]>([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [pendingId, setPendingId] = useState("");
   const load = useCallback(
     () =>
       apiFetch<{ items: RequestRow[] }>("/api/cod/requests?role=seller")
         .then((data) => setRows(data.items))
-        .catch(() => setRows([])),
+        .catch((cause) => {
+          setRows([]);
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Gagal memuat permintaan COD",
+          );
+        })
+        .finally(() => setLoading(false)),
     [],
   );
   useEffect(() => {
@@ -30,6 +40,7 @@ export function SellerCodRequests() {
   }, [load]);
   async function decide(row: RequestRow, action: "accept" | "reject") {
     setError("");
+    setPendingId(row.id);
     try {
       await apiFetch(`/api/cod/requests/${row.id}`, {
         method: "PATCH",
@@ -38,6 +49,8 @@ export function SellerCodRequests() {
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Gagal merespons COD");
+    } finally {
+      setPendingId("");
     }
   }
   const pending = rows.filter((row) => row.status === "requested");
@@ -47,7 +60,11 @@ export function SellerCodRequests() {
         Permintaan COD Masuk
       </h2>
       {error && <p className="text-sm text-bu-red-deep">{error}</p>}
-      {pending.length ? (
+      {loading ? (
+        <p className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
+          Memuat permintaan COD…
+        </p>
+      ) : pending.length ? (
         <div className="grid gap-3 lg:grid-cols-2">
           {pending.map((row) => (
             <div key={row.id} className="rounded-xl border bg-card p-4">
@@ -76,14 +93,16 @@ export function SellerCodRequests() {
                   size="sm"
                   className="flex-1 rounded-full"
                   onClick={() => void decide(row, "accept")}
+                  disabled={pendingId === row.id}
                 >
-                  Terima
+                  {pendingId === row.id ? "Memproses…" : "Terima"}
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   className="flex-1 rounded-full"
                   onClick={() => void decide(row, "reject")}
+                  disabled={pendingId === row.id}
                 >
                   Tolak
                 </Button>

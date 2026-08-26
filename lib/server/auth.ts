@@ -13,12 +13,14 @@ export async function requireUser(req: Request) {
   if (error || !user) throw new ApiError(401, "token tidak valid/kedaluwarsa");
 
   // Akun suspended/banned gak boleh pakai API tulis (PRD §38).
-  const { data: profile } = await createAdminClient()
+  const { data: profile, error: profileError } = await createAdminClient()
     .from("profiles")
     .select("status")
     .eq("id", user.id)
     .single();
-  if (profile && profile.status !== "active") {
+  if (profileError) throw profileError;
+  if (!profile) throw new ApiError(403, "profil akun belum siap");
+  if (profile.status !== "active") {
     throw new ApiError(
       403,
       profile.status === "suspended"
@@ -57,11 +59,12 @@ export async function writeAudit(
   targetId: string,
   detail: Record<string, unknown> = {},
 ) {
-  await createAdminClient().from("admin_actions").insert({
+  const { error } = await createAdminClient().from("admin_actions").insert({
     admin_id: adminId,
     action,
     target_type: targetType,
     target_id: targetId,
     detail,
   });
+  if (error) throw error;
 }

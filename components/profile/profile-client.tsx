@@ -31,12 +31,20 @@ const MENU = [
 ] as const;
 
 export function ProfileClient() {
-  const { user, profile, loading, setMode, signOut } = useAuth();
+  const {
+    user,
+    profile,
+    loading,
+    error: authError,
+    setMode,
+    signOut,
+  } = useAuth();
   const router = useRouter();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [stats, setStats] = useState({ rating: 0, completed: 0, noShow: 0 });
   const [message, setMessage] = useState("");
+  const [pending, setPending] = useState(false);
   useEffect(() => {
     if (!loading && !user) router.replace("/login?next=/profile");
     if (!user) return;
@@ -54,6 +62,11 @@ export function ProfileClient() {
         .eq("user_id", user.id)
         .maybeSingle(),
     ]).then(([p, c, r]) => {
+      const loadError = p.error ?? c.error ?? r.error;
+      if (loadError) {
+        setMessage(loadError.message);
+        return;
+      }
       setName(p.data?.name ?? "");
       setPhone(c.data?.phone ?? "");
       setStats({
@@ -63,6 +76,12 @@ export function ProfileClient() {
       });
     });
   }, [loading, router, user]);
+  if (user && authError)
+    return (
+      <div className="rounded-xl border border-bu-red/30 bg-bu-red/5 p-5 text-sm text-bu-red-deep">
+        Profil gagal dimuat: {authError}
+      </div>
+    );
   if (!user || !profile)
     return (
       <p className="py-16 text-center text-sm text-muted-foreground">
@@ -78,6 +97,15 @@ export function ProfileClient() {
   async function save() {
     if (!user) return;
     setMessage("");
+    if (name.trim().length < 3) {
+      setMessage("Nama minimal 3 karakter");
+      return;
+    }
+    if (phone && !/^08\d{8,11}$/.test(phone)) {
+      setMessage("Nomor WhatsApp harus format 08xxx, 10–13 digit");
+      return;
+    }
+    setPending(true);
     const db = createClient();
     const [{ error: pError }, { error: cError }] = await Promise.all([
       db.from("profiles").update({ name: name.trim() }).eq("id", user.id),
@@ -86,6 +114,7 @@ export function ProfileClient() {
         .upsert({ user_id: user.id, phone: phone.trim() || null }),
     ]);
     setMessage(pError?.message ?? cError?.message ?? "Profil tersimpan");
+    setPending(false);
     if (!pError && !cError) router.refresh();
   }
   return (
@@ -115,7 +144,16 @@ export function ProfileClient() {
             <button
               key={mode}
               type="button"
-              onClick={() => void setMode(mode)}
+              onClick={() =>
+                void setMode(mode).catch((cause) =>
+                  setMessage(
+                    cause instanceof Error
+                      ? cause.message
+                      : "Gagal mengubah mode",
+                  ),
+                )
+              }
+              disabled={pending}
               className={cn(
                 "py-3 text-sm font-bold",
                 mode === profile.mode
@@ -161,8 +199,12 @@ export function ProfileClient() {
             placeholder="08xxxxxxxxxx"
           />
         </div>
-        <Button className="w-full rounded-full" onClick={() => void save()}>
-          <Save /> Simpan profil
+        <Button
+          className="w-full rounded-full"
+          onClick={() => void save()}
+          disabled={pending}
+        >
+          <Save /> {pending ? "Menyimpan…" : "Simpan profil"}
         </Button>
         {message && <p className="text-xs text-muted-foreground">{message}</p>}
       </section>
@@ -185,7 +227,15 @@ export function ProfileClient() {
       <Button
         variant="outline"
         className="w-full rounded-full text-bu-red-deep"
-        onClick={() => void signOut().then(() => router.replace("/"))}
+        onClick={() =>
+          void signOut()
+            .then(() => router.replace("/"))
+            .catch((cause) =>
+              setMessage(
+                cause instanceof Error ? cause.message : "Gagal keluar",
+              ),
+            )
+        }
       >
         <LogOut /> Keluar
       </Button>

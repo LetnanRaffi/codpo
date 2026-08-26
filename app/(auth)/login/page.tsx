@@ -1,24 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { safeLocalPath } from "@/lib/navigation";
 
 const loginSchema = z.object({
   email: z.string().email("Email gak valid"),
   password: z.string().min(8, "Password minimal 8 karakter"),
 });
 
-export default function LoginPage() {
+function LoginForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const notice =
+    searchParams.get("registered") === "1"
+      ? "Akun berhasil dibuat. Cek email untuk konfirmasi, lalu masuk."
+      : searchParams.get("password_updated") === "1"
+        ? "Password berhasil diperbarui. Silakan masuk kembali."
+        : "";
+  const formError = errors.form || searchParams.get("auth_error");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -47,7 +56,7 @@ export default function LoginPage() {
       return;
     }
     const next = new URLSearchParams(window.location.search).get("next");
-    router.replace(next?.startsWith("/") ? next : "/");
+    router.replace(safeLocalPath(next));
     router.refresh();
   }
 
@@ -59,6 +68,15 @@ export default function LoginPage() {
       <p className="mt-1 mb-5 text-sm text-muted-foreground">
         Satu akun buat jadi buyer &amp; seller.
       </p>
+
+      {notice && (
+        <p
+          role="status"
+          className="mb-4 rounded-lg bg-trust-green/10 p-3 text-sm text-trust-green"
+        >
+          {notice}
+        </p>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <div className="space-y-1.5">
@@ -78,6 +96,15 @@ export default function LoginPage() {
               {errors.email}
             </p>
           )}
+        </div>
+
+        <div className="text-right">
+          <Link
+            href="/forgot-password"
+            className="text-xs font-medium text-bu-red hover:underline"
+          >
+            Lupa password?
+          </Link>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="login-password">Password</Label>
@@ -106,9 +133,9 @@ export default function LoginPage() {
         >
           {pending ? "Memeriksa…" : "Masuk"}
         </Button>
-        {errors.form && (
+        {formError && (
           <p role="alert" className="text-sm font-medium text-bu-red-deep">
-            {errors.form}
+            {formError}
           </p>
         )}
       </form>
@@ -123,5 +150,19 @@ export default function LoginPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">
+          Memuat formulir masuk…
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

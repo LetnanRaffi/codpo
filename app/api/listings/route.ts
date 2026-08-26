@@ -3,6 +3,7 @@ import { optionalUser, requireUser } from "@/lib/server/auth";
 import { rateLimit } from "@/lib/server/ratelimit";
 import { listingCreateSchema } from "@/lib/server/schemas";
 import { userClient } from "@/lib/server/user-client";
+import { publicObjectUrl } from "@/lib/server/marketplace";
 
 export const dynamic = "force-dynamic";
 
@@ -14,29 +15,75 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
-    const num = (k: string) => {
+    const num = (k: string, min?: number, max?: number) => {
       const v = url.searchParams.get(k);
-      return v === null || v === "" ? null : Number(v);
+      if (v === null || v === "") return null;
+      const parsed = Number(v);
+      if (
+        !Number.isFinite(parsed) ||
+        (min !== undefined && parsed < min) ||
+        (max !== undefined && parsed > max)
+      ) {
+        throw new ApiError(422, `parameter ${k} tidak valid`);
+      }
+      return parsed;
     };
+    const sort = url.searchParams.get("sort") ?? "recommended";
+    if (
+      !["recommended", "terdekat", "terbaru", "termurah", "termahal"].includes(
+        sort,
+      )
+    ) {
+      throw new ApiError(422, "parameter sort tidak valid");
+    }
+    const minPrice = num("min_price", 0);
+    const maxPrice = num("max_price", 0);
+    if (minPrice !== null && maxPrice !== null && minPrice > maxPrice) {
+      throw new ApiError(422, "harga minimum tidak boleh melebihi maksimum");
+    }
     const db = userClient(req); // anon tetap bisa — RPC security invoker menghormati RLS
 
     const { data, error } = await db.rpc("search_listings", {
       p_q: url.searchParams.get("q"),
       p_category_slug: url.searchParams.get("category_slug"),
       p_condition: url.searchParams.get("condition"),
-      p_min_price: num("min_price"),
-      p_max_price: num("max_price"),
+      p_min_price: minPrice,
+      p_max_price: maxPrice,
       p_bu_only: url.searchParams.get("bu_only") === "true",
       p_cod_only: url.searchParams.get("cod_only") === "true",
-      p_lat: num("lat"),
-      p_lng: num("lng"),
-      p_radius_m: num("radius_m"),
-      p_sort: url.searchParams.get("sort") ?? "recommended",
-      p_limit: Math.min(Number(num("limit") ?? 24), 50),
-      p_offset: Math.max(Number(num("offset") ?? 0), 0),
+      p_lat: num("lat", -90, 90),
+      p_lng: num("lng", -180, 180),
+      p_radius_m: num("radius_m", 1, 1_000_000),
+      p_sort: sort,
+      p_limit: Math.min(Math.trunc(num("limit", 1, 50) ?? 24), 50),
+      p_offset: Math.trunc(num("offset", 0) ?? 0),
     });
     if (error) throw error;
-    return ok({ items: data ?? [] });
+    const rows = (data ?? []) as Record<string, unknown>[];
+    const ids = rows.map((row) => String(row.id));
+    const imageMap = new Map<string, string[]>();
+    if (ids.length) {
+      const { data: images, error: imageError } = await db
+        .from("listing_images")
+        .select("listing_id,object_key,position")
+        .in("listing_id", ids)
+        .order("position");
+      if (imageError) throw imageError;
+      for (const image of images ?? []) {
+        const imageUrl = publicObjectUrl(image.object_key);
+        if (!imageUrl) continue;
+        imageMap.set(image.listing_id, [
+          ...(imageMap.get(image.listing_id) ?? []),
+          imageUrl,
+        ]);
+      }
+    }
+    return ok({
+      items: rows.map((row) => ({
+        ...row,
+        images: imageMap.get(String(row.id)) ?? [],
+      })),
+    });
   } catch (e) {
     return handleError(e);
   }

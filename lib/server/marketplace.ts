@@ -7,7 +7,7 @@ type Row = Record<string, unknown>;
 
 export function publicObjectUrl(key: string) {
   const base = process.env.R2_PUBLIC_BASE_URL?.replace(/\/$/, "");
-  return base ? `${base}/${key}` : "";
+  return base ? `${base}/${key}` : `/api/media?key=${encodeURIComponent(key)}`;
 }
 
 export function listingFromRow(
@@ -66,11 +66,12 @@ export function listingFromRow(
 
 export async function getCategories(): Promise<Category[]> {
   const db = await createClient();
-  const { data } = await db
+  const { data, error } = await db
     .from("categories")
     .select("id,slug,name")
     .eq("active", true)
     .order("sort_order");
+  if (error) throw error;
   return (data ?? []) as Category[];
 }
 
@@ -135,30 +136,61 @@ export async function searchListings(
 
 export async function getListing(id: string): Promise<Listing | null> {
   const db = await createClient();
-  const { data: row } = await db
+  const { data: publicRow, error } = await db
     .from("listing_public")
     .select("*")
     .eq("id", id)
     .maybeSingle();
+  if (error) throw error;
+  let row: Row | null = publicRow as Row | null;
+  if (!row) {
+    const { data: privateRow, error: privateError } = await db
+      .from("listings")
+      .select("*,categories(slug,name)")
+      .eq("id", id)
+      .maybeSingle();
+    if (privateError) throw privateError;
+    if (privateRow) {
+      const category = Array.isArray(privateRow.categories)
+        ? privateRow.categories[0]
+        : privateRow.categories;
+      row = {
+        ...privateRow,
+        category_slug: category?.slug ?? "lainnya",
+        category_name: category?.name ?? "Lainnya",
+        effective_sale_type:
+          privateRow.sale_type === "BU" &&
+          privateRow.bu_expires_at &&
+          new Date(privateRow.bu_expires_at) > new Date()
+            ? "BU"
+            : "NORMAL",
+      } as Row;
+    }
+  }
   if (!row) return null;
-  const [{ data: images }, { data: profile }, { data: reputation }] =
-    await Promise.all([
-      db
-        .from("listing_images")
-        .select("object_key,position")
-        .eq("listing_id", id)
-        .order("position"),
-      db
-        .from("profiles")
-        .select("id,name,avatar_key,verified,created_at")
-        .eq("id", row.seller_id)
-        .maybeSingle(),
-      db
-        .from("user_reputation")
-        .select("avg_rating,completed_transactions")
-        .eq("user_id", row.seller_id)
-        .maybeSingle(),
-    ]);
+  const [imagesResult, profileResult, reputationResult] = await Promise.all([
+    db
+      .from("listing_images")
+      .select("object_key,position")
+      .eq("listing_id", id)
+      .order("position"),
+    db
+      .from("profiles")
+      .select("id,name,avatar_key,verified,created_at")
+      .eq("id", row.seller_id)
+      .maybeSingle(),
+    db
+      .from("user_reputation")
+      .select("avg_rating,completed_transactions")
+      .eq("user_id", row.seller_id)
+      .maybeSingle(),
+  ]);
+  if (imagesResult.error) throw imagesResult.error;
+  if (profileResult.error) throw profileResult.error;
+  if (reputationResult.error) throw reputationResult.error;
+  const images = imagesResult.data;
+  const profile = profileResult.data;
+  const reputation = reputationResult.data;
   const seller = {
     id: String(row.seller_id),
     name: profile?.name ?? "Pengguna CODPO",

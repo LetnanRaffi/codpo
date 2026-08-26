@@ -17,7 +17,7 @@ export async function GET(req: Request) {
 
     if (unreadOnly) q = q.is("read_at", null);
 
-    const [{ data: items }, { count }] = await Promise.all([
+    const [itemsResult, countResult] = await Promise.all([
       q.order("created_at", { ascending: false }).limit(50),
       createAdminClient()
         .from("notifications")
@@ -25,8 +25,13 @@ export async function GET(req: Request) {
         .eq("user_id", user.id)
         .is("read_at", null),
     ]);
+    if (itemsResult.error) throw itemsResult.error;
+    if (countResult.error) throw countResult.error;
 
-    return ok({ items: items ?? [], unread_count: count ?? 0 });
+    return ok({
+      items: itemsResult.data ?? [],
+      unread_count: countResult.count ?? 0,
+    });
   } catch (e) {
     return handleError(e);
   }

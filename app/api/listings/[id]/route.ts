@@ -1,6 +1,8 @@
 import { ApiError, handleError, ok, parseBody } from "@/lib/server/api";
 import { optionalUser, requireUser } from "@/lib/server/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { r2 } from "@/lib/r2";
 import { listingUpdateSchema } from "@/lib/server/schemas";
 import { userClient } from "@/lib/server/user-client";
 
@@ -147,7 +149,34 @@ export async function DELETE(req: Request, ctx: Ctx) {
     if (error) throw error;
     if (!deleted)
       throw new ApiError(404, "listing tidak ditemukan / bukan milikmu");
-    return ok({ deleted: true });
+
+    // DB cascade menghapus metadata gambar; hapus objek fisiknya berdasarkan
+    // prefix agar upload yang sempat PUT tetapi belum tercatat juga ikut bersih.
+    let mediaCleanup = true;
+    try {
+      const listed = await r2.send(
+        new ListObjectsV2Command({
+          Bucket: process.env.R2_BUCKET!,
+          Prefix: `listings/${id}/`,
+        }),
+      );
+      const objects = (listed.Contents ?? [])
+        .map((item) => item.Key)
+        .filter((key): key is string => Boolean(key))
+        .map((Key) => ({ Key }));
+      if (objects.length) {
+        await r2.send(
+          new DeleteObjectsCommand({
+            Bucket: process.env.R2_BUCKET!,
+            Delete: { Objects: objects, Quiet: true },
+          }),
+        );
+      }
+    } catch (cleanupError) {
+      mediaCleanup = false;
+      console.error("[listing.media-cleanup]", cleanupError);
+    }
+    return ok({ deleted: true, media_cleanup: mediaCleanup });
   } catch (e) {
     return handleError(e);
   }

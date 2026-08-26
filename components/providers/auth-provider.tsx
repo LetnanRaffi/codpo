@@ -9,10 +9,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import {
-  createClient,
-  hasSupabaseBrowserConfig,
-} from "@/lib/supabase/client";
+import { createClient, hasSupabaseBrowserConfig } from "@/lib/supabase/client";
 
 export interface AuthProfile {
   id: string;
@@ -26,6 +23,7 @@ interface AuthState {
   user: User | null;
   profile: AuthProfile | null;
   loading: boolean;
+  error: string | null;
   signOut: () => Promise<void>;
   setMode: (mode: "buyer" | "seller") => Promise<void>;
 }
@@ -40,10 +38,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<AuthProfile | null>(null);
   const [loading, setLoading] = useState(() => Boolean(supabase));
+  const [error, setError] = useState<string | null>(null);
 
   const loadProfile = useCallback(
     async (nextUser: User | null) => {
       setUser(nextUser);
+      setError(null);
       if (!supabase) {
         setProfile(null);
         setLoading(false);
@@ -54,11 +54,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
         return;
       }
-      const { data } = await supabase
+      const { data, error: profileError } = await supabase
         .from("profiles")
         .select("id,name,avatar_key,mode,verified")
         .eq("id", nextUser.id)
         .maybeSingle();
+      if (profileError || !data) {
+        setProfile(null);
+        setError(profileError?.message ?? "Profil akun tidak ditemukan");
+        setLoading(false);
+        return;
+      }
       setProfile((data as AuthProfile | null) ?? null);
       setLoading(false);
     },
@@ -67,7 +73,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!supabase) return;
-    void supabase.auth.getUser().then(({ data }) => loadProfile(data.user));
+    void supabase.auth
+      .getUser()
+      .then(({ data, error: userError }) => {
+        if (userError) throw userError;
+        return loadProfile(data.user);
+      })
+      .catch((cause) => {
+        setError(cause instanceof Error ? cause.message : "Gagal memuat sesi");
+        setLoading(false);
+      });
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         void loadProfile(session?.user ?? null);
@@ -78,7 +93,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     if (!supabase) return;
-    await supabase.auth.signOut();
+    const { error: signOutError } = await supabase.auth.signOut();
+    if (signOutError) throw signOutError;
     setUser(null);
     setProfile(null);
   }, [supabase]);
@@ -97,7 +113,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signOut, setMode }}>
+    <AuthContext.Provider
+      value={{ user, profile, loading, error, signOut, setMode }}
+    >
       {children}
     </AuthContext.Provider>
   );

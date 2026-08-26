@@ -9,10 +9,12 @@ function ActionButton({
   label,
   action,
   danger = false,
+  confirmMessage,
 }: {
   label: string;
   action: () => Promise<unknown>;
   danger?: boolean;
+  confirmMessage?: string;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -25,6 +27,7 @@ function ActionButton({
         disabled={pending}
         className={`h-8 rounded-full ${danger ? "text-bu-red-deep" : ""}`}
         onClick={() => {
+          if (confirmMessage && !window.confirm(confirmMessage)) return;
           setPending(true);
           setError("");
           void action()
@@ -38,8 +41,11 @@ function ActionButton({
         {pending ? "…" : label}
       </Button>
       {error && (
-        <span className="text-[10px] text-bu-red-deep" title={error}>
-          Gagal
+        <span
+          className="block max-w-48 text-[10px] text-bu-red-deep"
+          title={error}
+        >
+          Gagal: {error}
         </span>
       )}
     </>
@@ -69,6 +75,7 @@ export function AdminUserActions({
     <div className="inline-flex">
       <ActionButton
         label="Suspend"
+        confirmMessage="Suspend akun ini? User tidak dapat memakai API tulis sampai dipulihkan."
         action={() =>
           apiFetch(`/api/admin/users/${id}`, {
             method: "PATCH",
@@ -79,6 +86,7 @@ export function AdminUserActions({
       <ActionButton
         label="Ban"
         danger
+        confirmMessage="Blokir akun ini? Pastikan bukti moderasi sudah ditinjau."
         action={() =>
           apiFetch(`/api/admin/users/${id}`, {
             method: "PATCH",
@@ -102,6 +110,11 @@ export function AdminListingActions({
     <ActionButton
       label={action === "remove" ? "Hapus" : "Pulihkan"}
       danger={action === "remove"}
+      confirmMessage={
+        action === "remove"
+          ? "Hapus listing ini dari marketplace?"
+          : "Pulihkan listing ini ke marketplace?"
+      }
       action={() =>
         apiFetch(`/api/admin/listings/${id}`, {
           method: "PATCH",
@@ -125,6 +138,7 @@ export function AdminReportActions({
     <div className="inline-flex">
       <ActionButton
         label="Resolve"
+        confirmMessage="Tandai laporan ini selesai?"
         action={() =>
           apiFetch(`/api/admin/reports/${id}`, {
             method: "PATCH",
@@ -134,6 +148,7 @@ export function AdminReportActions({
       />
       <ActionButton
         label="Tolak"
+        confirmMessage="Tolak laporan ini tanpa tindakan lanjutan?"
         action={() =>
           apiFetch(`/api/admin/reports/${id}`, {
             method: "PATCH",

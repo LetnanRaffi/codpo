@@ -14,11 +14,12 @@ export default async function FavoritesPage() {
     data: { user },
   } = await db.auth.getUser();
   if (!user) redirect("/login?next=/favorites");
-  const { data } = await db
+  const { data, error } = await db
     .from("favorites")
     .select("listing_id")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
+  if (error) throw error;
   const favorites = (
     await Promise.all((data ?? []).map((row) => getListing(row.listing_id)))
   ).filter((item) => item !== null);

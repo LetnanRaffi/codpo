@@ -8,7 +8,7 @@ import { requireAdminPage } from "@/lib/server/admin-page";
 export const metadata: Metadata = { title: "Admin · Listings" };
 export default async function Page() {
   const { admin } = await requireAdminPage();
-  const [{ data: rows }, { data: reports }] = await Promise.all([
+  const [rowsResult, reportsResult] = await Promise.all([
     admin
       .from("listings")
       .select(
@@ -22,13 +22,18 @@ export default async function Page() {
       .eq("target_type", "listing")
       .in("status", ["open", "reviewing"]),
   ]);
+  if (rowsResult.error) throw rowsResult.error;
+  if (reportsResult.error) throw reportsResult.error;
+  const rows = rowsResult.data;
+  const reports = reportsResult.data;
   const sellers = new Map<string, string>();
   const ids = [...new Set((rows ?? []).map((item) => item.seller_id))];
   if (ids.length) {
-    const { data } = await admin
+    const { data, error } = await admin
       .from("profiles")
       .select("id,name")
       .in("id", ids);
+    if (error) throw error;
     for (const item of data ?? []) sellers.set(item.id, item.name);
   }
   const flagged = new Set((reports ?? []).map((item) => item.target_id));
@@ -98,6 +103,16 @@ export default async function Page() {
                 </td>
               </tr>
             ))}
+            {(rows ?? []).length === 0 && (
+              <tr>
+                <td
+                  colSpan={5}
+                  className="px-4 py-10 text-center text-muted-foreground"
+                >
+                  Belum ada listing.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

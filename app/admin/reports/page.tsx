@@ -1,24 +1,27 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { AdminReportActions } from "@/components/admin/admin-actions";
 import { Badge } from "@/components/ui/badge";
 import { requireAdminPage } from "@/lib/server/admin-page";
 export const metadata: Metadata = { title: "Admin · Reports" };
 export default async function Page() {
   const { admin } = await requireAdminPage();
-  const { data: reports } = await admin
+  const { data: reports, error: reportsError } = await admin
     .from("reports")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(300);
+  if (reportsError) throw reportsError;
   const reporterIds = [
     ...new Set((reports ?? []).map((item) => item.reporter_id)),
   ];
   const names = new Map<string, string>();
   if (reporterIds.length) {
-    const { data } = await admin
+    const { data, error } = await admin
       .from("profiles")
       .select("id,name")
       .in("id", reporterIds);
+    if (error) throw error;
     for (const item of data ?? []) names.set(item.id, item.name);
   }
   return (
@@ -48,10 +51,31 @@ export default async function Page() {
                   <p className="text-xs text-muted-foreground uppercase">
                     {item.target_type}
                   </p>
-                  <p className="font-mono text-xs">{item.target_id}</p>
+                  {item.target_type === "listing" ? (
+                    <Link
+                      href={`/listing/${item.target_id}`}
+                      className="font-mono text-xs hover:underline"
+                    >
+                      {item.target_id}
+                    </Link>
+                  ) : item.target_type === "user" ? (
+                    <Link
+                      href={`/seller/${item.target_id}`}
+                      className="font-mono text-xs hover:underline"
+                    >
+                      {item.target_id}
+                    </Link>
+                  ) : (
+                    <p className="font-mono text-xs">{item.target_id}</p>
+                  )}
                 </td>
                 <td className="px-4 py-3 capitalize">
                   {item.reason.replaceAll("_", " ")}
+                  {item.description && (
+                    <p className="mt-1 max-w-xs text-xs text-muted-foreground normal-case">
+                      {item.description}
+                    </p>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   {names.get(item.reporter_id) ?? "Pengguna"}
@@ -72,6 +96,16 @@ export default async function Page() {
                 </td>
               </tr>
             ))}
+            {(reports ?? []).length === 0 && (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="px-4 py-10 text-center text-muted-foreground"
+                >
+                  Tidak ada laporan.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

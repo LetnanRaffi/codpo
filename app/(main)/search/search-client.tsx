@@ -1,11 +1,14 @@
 "use client";
 
 import { Flame, SearchX, SlidersHorizontal } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { EmptyState } from "@/components/empty-state";
-import { ListingCard } from "@/components/listing/listing-card";
+import {
+  ListingCard,
+  ListingCardSkeleton,
+} from "@/components/listing/listing-card";
 import { useRadius } from "@/components/providers/radius-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -121,7 +124,10 @@ function FilterPanel({
             placeholder="Min"
             value={filters.minPrice}
             onChange={(e) =>
-              setFilters({ ...filters, minPrice: e.target.value })
+              setFilters({
+                ...filters,
+                minPrice: e.target.value.replace(/\D/g, ""),
+              })
             }
             aria-label="Harga minimum"
             className="h-9 rounded-full font-mono text-xs"
@@ -132,7 +138,10 @@ function FilterPanel({
             placeholder="Maks"
             value={filters.maxPrice}
             onChange={(e) =>
-              setFilters({ ...filters, maxPrice: e.target.value })
+              setFilters({
+                ...filters,
+                maxPrice: e.target.value.replace(/\D/g, ""),
+              })
             }
             aria-label="Harga maksimum"
             className="h-9 rounded-full font-mono text-xs"
@@ -206,7 +215,7 @@ function mapRow(row: SearchRow): Listing {
     bu_price: row.bu_price == null ? null : Number(row.bu_price),
     sale_type: String(row.effective_sale_type ?? "NORMAL") as "NORMAL" | "BU",
     bu_expires_at: null,
-    images: [],
+    images: Array.isArray(row.images) ? row.images.map(String) : [],
     area_label: String(row.area_label ?? "Indonesia"),
     distance_km: Number(row.distance_km ?? 0),
     cod_available: Boolean(row.cod_available),
@@ -229,19 +238,53 @@ function mapRow(row: SearchRow): Listing {
 
 export function SearchClient({ categories }: { categories: Category[] }) {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
   const { radiusKm, position } = useRadius();
   const q = searchParams.get("q") ?? "";
-  const [sort, setSort] = useState<SortKey>("recommended");
+  const initialSort = searchParams.get("sort");
+  const [sort, setSort] = useState<SortKey>(
+    SORTS.some((item) => item.value === initialSort)
+      ? (initialSort as SortKey)
+      : "recommended",
+  );
   const [filters, setFilters] = useState<Filters>({
     ...EMPTY_FILTERS,
+    categorySlug: searchParams.get("category_slug") ?? "",
+    condition: (searchParams.get("condition") as Condition | null) ?? "",
+    minPrice: searchParams.get("min_price") ?? "",
+    maxPrice: searchParams.get("max_price") ?? "",
     buOnly: searchParams.get("bu") === "1",
+    codOnly: searchParams.get("cod_only") === "true",
   });
   const [sheetOpen, setSheetOpen] = useState(false);
   const [results, setResults] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const minPrice = filters.minPrice ? Number(filters.minPrice) : null;
+  const maxPrice = filters.maxPrice ? Number(filters.maxPrice) : null;
+  const priceError =
+    minPrice !== null && maxPrice !== null && minPrice > maxPrice
+      ? "Harga minimum tidak boleh lebih besar dari harga maksimum."
+      : "";
+
+  useEffect(() => {
+    const query = new URLSearchParams();
+    if (q) query.set("q", q);
+    if (sort !== "recommended") query.set("sort", sort);
+    if (filters.categorySlug) query.set("category_slug", filters.categorySlug);
+    if (filters.condition) query.set("condition", filters.condition);
+    if (filters.minPrice) query.set("min_price", filters.minPrice);
+    if (filters.maxPrice) query.set("max_price", filters.maxPrice);
+    if (filters.buOnly) query.set("bu", "1");
+    if (filters.codOnly) query.set("cod_only", "true");
+    const next = query.size ? `${pathname}?${query}` : pathname;
+    router.replace(next, { scroll: false });
+  }, [filters, pathname, q, router, sort]);
 
   useEffect(() => {
     const controller = new AbortController();
+    if (priceError) return () => controller.abort();
     const query = new URLSearchParams({ sort, limit: "50" });
     if (q) query.set("q", q);
     if (filters.categorySlug) query.set("category_slug", filters.categorySlug);
@@ -255,15 +298,31 @@ export function SearchClient({ categories }: { categories: Category[] }) {
       query.set("lng", String(position.lng));
       query.set("radius_m", String(radiusKm * 1000));
     }
-    fetch(`/api/listings?${query}`, { signal: controller.signal })
-      .then((response) => response.json())
-      .then((payload) => setResults((payload.data?.items ?? []).map(mapRow)))
-      .catch((error) => {
-        if (error.name !== "AbortError") setResults([]);
+    Promise.resolve()
+      .then(() => {
+        setLoading(true);
+        setError("");
+        return fetch(`/api/listings?${query}`, { signal: controller.signal });
+      })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.ok) {
+          throw new Error(
+            payload?.error ?? `Pencarian gagal (${response.status})`,
+          );
+        }
+        return payload;
+      })
+      .then((payload) => setResults(payload.data.items.map(mapRow)))
+      .catch((cause) => {
+        if (cause.name !== "AbortError") {
+          setResults([]);
+          setError(cause instanceof Error ? cause.message : "Pencarian gagal");
+        }
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [q, filters, sort, radiusKm, position]);
+  }, [q, filters, sort, radiusKm, position, priceError]);
   const activeFilterCount =
     (filters.categorySlug ? 1 : 0) +
     (filters.condition ? 1 : 0) +
@@ -288,8 +347,8 @@ export function SearchClient({ categories }: { categories: Category[] }) {
               {q ? `Hasil "${q}"` : "Jelajahi Barang"}
             </h1>
             <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-              {loading ? "Mencari…" : `${results.length} barang`} · radius{" "}
-              {radiusKm} km
+              {loading && !priceError ? "Mencari…" : `${results.length} barang`}{" "}
+              · radius {radiusKm} km
             </p>
           </div>
 
@@ -353,7 +412,28 @@ export function SearchClient({ categories }: { categories: Category[] }) {
           </div>
         </div>
 
-        {results.length > 0 ? (
+        {loading && !priceError ? (
+          <div
+            className="grid grid-cols-2 gap-3 sm:grid-cols-3"
+            aria-label="Memuat hasil pencarian"
+          >
+            {Array.from({ length: 6 }).map((_, index) => (
+              <ListingCardSkeleton key={index} />
+            ))}
+          </div>
+        ) : error || priceError ? (
+          <EmptyState
+            icon={<SearchX className="size-8" />}
+            title="Pencarian gagal dimuat"
+            description={error || priceError}
+            actionLabel={priceError ? "Hapus filter harga" : "Coba lagi"}
+            onAction={() =>
+              priceError
+                ? setFilters({ ...filters, minPrice: "", maxPrice: "" })
+                : setFilters({ ...filters })
+            }
+          />
+        ) : results.length > 0 ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {results.map((listing) => (
               <ListingCard key={listing.id} listing={listing} />

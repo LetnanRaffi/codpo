@@ -17,11 +17,14 @@ export default function Page() {
   const [rows, setRows] = useState<CategoryRow[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState(false);
   const load = useCallback(
     () =>
       apiFetch<{ items: CategoryRow[] }>("/api/admin/categories")
         .then((data) => setRows(data.items))
-        .catch((cause) => setError(cause.message)),
+        .catch((cause) => setError(cause.message))
+        .finally(() => setLoading(false)),
     [],
   );
   useEffect(() => {
@@ -29,6 +32,7 @@ export default function Page() {
   }, [load]);
   const save = async (row: Omit<CategoryRow, "id">) => {
     setError("");
+    setPending(true);
     try {
       await apiFetch("/api/admin/categories", {
         method: "POST",
@@ -38,6 +42,8 @@ export default function Page() {
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Gagal");
+    } finally {
+      setPending(false);
     }
   };
   const slugify = (value: string) =>
@@ -76,11 +82,14 @@ export default function Page() {
           placeholder="Nama kategori baru"
           className="rounded-full"
         />
-        <Button className="rounded-full" disabled={!name.trim()}>
+        <Button className="rounded-full" disabled={!name.trim() || pending}>
           <Plus /> Tambah
         </Button>
       </form>
       {error && <p className="text-sm text-bu-red-deep">{error}</p>}
+      {loading && (
+        <p className="text-sm text-muted-foreground">Memuat kategori…</p>
+      )}
       <div className="overflow-x-auto rounded-xl border bg-card">
         <table className="w-full min-w-[560px] text-sm">
           <thead>
@@ -105,6 +114,7 @@ export default function Page() {
                   <Button
                     variant="ghost"
                     size="sm"
+                    disabled={pending}
                     onClick={() =>
                       void save({
                         slug: row.slug,
@@ -120,6 +130,16 @@ export default function Page() {
                 </td>
               </tr>
             ))}
+            {!loading && rows.length === 0 && (
+              <tr>
+                <td
+                  colSpan={4}
+                  className="px-4 py-10 text-center text-muted-foreground"
+                >
+                  Belum ada kategori.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

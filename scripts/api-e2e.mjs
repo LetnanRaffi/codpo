@@ -286,6 +286,27 @@ try {
     up.status === 200,
     `HTTP ${up.status}`,
   );
+  const { error: imageInsertError } = await A.sb.from("listing_images").insert({
+    listing_id: LISTING,
+    object_key: pres.key,
+    position: 0,
+  });
+  assert("metadata gambar listing tersimpan", !imageInsertError);
+  r = await api(null)("GET", `/api/listings?q=iPhone`);
+  const listingWithImage = (r.json?.data?.items ?? []).find(
+    (item) => item.id === LISTING,
+  );
+  assert(
+    "hasil pencarian membawa URL foto",
+    r.status === 200 && Boolean(listingWithImage?.images?.[0]),
+  );
+  if (listingWithImage?.images?.[0]) {
+    const publicImage = await fetch(BASE + listingWithImage.images[0]);
+    assert(
+      "media listing dapat dibaca publik lewat signed fallback",
+      publicImage.status === 200,
+    );
+  }
   r = await apiA("POST", "/api/upload/presign", {
     kind: "listing",
     mime: "image/gif",
@@ -312,6 +333,69 @@ try {
     body: "gan ready?",
   });
   assert("B kirim pesan", r.status === 201);
+
+  r = await apiB("POST", "/api/upload/presign", {
+    kind: "chat",
+    mime: "image/png",
+    size: png1px.length,
+  });
+  const chatImage = r.json?.data;
+  assert(
+    "B mendapat presign gambar chat",
+    r.status === 200 && !!chatImage?.key,
+  );
+  if (chatImage?.key) {
+    cleanupObjects.push(chatImage.key);
+    const chatUpload = await fetch(chatImage.upload_url, {
+      method: "PUT",
+      headers: chatImage.headers,
+      body: png1px,
+    });
+    assert("upload gambar chat ke R2 sukses", chatUpload.status === 200);
+    r = await apiC("POST", `/api/conversations/${CONV}/messages`, {
+      type: "image",
+      body: "milik-b.png",
+      media_key: chatImage.key,
+    });
+    assert("media_key chat user lain ditolak", r.status === 403);
+    r = await apiB("POST", `/api/conversations/${CONV}/messages`, {
+      type: "image",
+      body: "bukti.png",
+      media_key: chatImage.key,
+    });
+    assert("B kirim gambar chat milik sendiri", r.status === 201);
+    r = await apiC(
+      "GET",
+      `/api/media?key=${encodeURIComponent(chatImage.key)}`,
+    );
+    assert("media chat tertutup untuk outsider", r.status === 404);
+    r = await apiB(
+      "GET",
+      `/api/media?key=${encodeURIComponent(chatImage.key)}`,
+    );
+    assert("media chat dapat dibaca participant", r.status === 200);
+  }
+
+  r = await apiA("GET", "/api/conversations");
+  const sellerInbox = (r.json?.data?.items ?? []).find(
+    (item) => item.id === CONV,
+  );
+  assert(
+    "pesan baru tampil sebagai unread seller",
+    r.status === 200 && sellerInbox?.unread_count >= 1,
+  );
+
+  r = await apiC("PATCH", `/api/conversations/${CONV}/read`);
+  assert("RLS: C tidak bisa menandai chat A-B dibaca", r.status >= 400);
+
+  r = await apiA("PATCH", `/api/conversations/${CONV}/read`);
+  assert("A menandai percakapan dibaca", r.status === 200);
+  r = await apiA("GET", "/api/conversations");
+  assert(
+    "unread seller kembali nol setelah dibaca",
+    (r.json?.data?.items ?? []).find((item) => item.id === CONV)
+      ?.unread_count === 0,
+  );
 
   r = await apiC("GET", `/api/conversations/${CONV}/messages`);
   assert(
@@ -454,6 +538,31 @@ try {
   assert(
     "listing otomatis SOLD setelah COD selesai",
     r.json?.data?.listing?.status === "sold",
+  );
+  const { data: soldForBuyer } = await B.sb
+    .from("listings")
+    .select("id,status")
+    .eq("id", LISTING)
+    .maybeSingle();
+  assert(
+    "buyer transaksi tetap bisa melihat listing sold",
+    soldForBuyer?.status === "sold",
+  );
+  const { data: soldImagesForBuyer } = await B.sb
+    .from("listing_images")
+    .select("object_key")
+    .eq("listing_id", LISTING);
+  assert(
+    "buyer transaksi tetap bisa melihat foto listing sold",
+    (soldImagesForBuyer ?? []).length === 1,
+  );
+  const { data: soldForOutsider } = await C.sb
+    .from("listings")
+    .select("id")
+    .eq("id", LISTING);
+  assert(
+    "RLS: outsider tidak bisa melihat listing sold",
+    (soldForOutsider ?? []).length === 0,
   );
 
   // ===== I. Reviews =====

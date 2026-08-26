@@ -5,7 +5,7 @@ import { requireAdminPage } from "@/lib/server/admin-page";
 export const metadata: Metadata = { title: "Admin · Users" };
 export default async function Page() {
   const { admin } = await requireAdminPage();
-  const [{ data: users }, { data: reps }] = await Promise.all([
+  const [usersResult, repsResult] = await Promise.all([
     admin
       .from("profiles")
       .select("id,name,status,created_at")
@@ -15,6 +15,10 @@ export default async function Page() {
       .from("user_reputation")
       .select("user_id,avg_rating,completed_transactions"),
   ]);
+  if (usersResult.error) throw usersResult.error;
+  if (repsResult.error) throw repsResult.error;
+  const users = usersResult.data;
+  const reps = repsResult.data;
   const rep = new Map((reps ?? []).map((item) => [item.user_id, item]));
   return (
     <div className="space-y-4">
@@ -64,6 +68,16 @@ export default async function Page() {
                 </td>
               </tr>
             ))}
+            {(users ?? []).length === 0 && (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="px-4 py-10 text-center text-muted-foreground"
+                >
+                  Belum ada user.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

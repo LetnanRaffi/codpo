@@ -229,21 +229,33 @@ export default function TransactionsPage() {
   const router = useRouter();
   const [tab, setTab] = useState<TabKey>("aktif");
   const [allRows, setAllRows] = useState<BuyerTransactionRow[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [error, setError] = useState("");
   const { user, loading } = useAuth();
-  const load = useCallback(
-    () =>
-      apiFetch<{ items: BuyerTransactionRow[] }>("/api/transactions")
-        .then((data) => setAllRows(data.items))
-        .catch(() => setAllRows([])),
-    [],
-  );
+  const load = useCallback(async () => {
+    setDataLoading(true);
+    setError("");
+    try {
+      const data = await apiFetch<{ items: BuyerTransactionRow[] }>(
+        "/api/transactions",
+      );
+      setAllRows(data.items);
+    } catch (cause) {
+      setAllRows([]);
+      setError(
+        cause instanceof Error ? cause.message : "Gagal memuat transaksi",
+      );
+    } finally {
+      setDataLoading(false);
+    }
+  }, []);
   useEffect(() => {
     if (loading) return;
     if (!user) {
       router.replace("/login?next=/transactions");
       return;
     }
-    void load();
+    queueMicrotask(() => void load());
   }, [load, loading, router, user]);
 
   if (loading || !user)
@@ -293,7 +305,26 @@ export default function TransactionsPage() {
         ))}
       </div>
 
-      {rows.length > 0 ? (
+      {dataLoading ? (
+        <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+          Memuat transaksi…
+        </p>
+      ) : error ? (
+        <div
+          role="alert"
+          className="rounded-xl border border-bu-red/30 bg-bu-red/5 p-5 text-sm text-bu-red-deep"
+        >
+          <p>{error}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3 rounded-full"
+            onClick={() => void load()}
+          >
+            Coba lagi
+          </Button>
+        </div>
+      ) : rows.length > 0 ? (
         <div className="grid gap-3 lg:grid-cols-2">
           {rows.map((row) => (
             <TransactionCard key={row.id} row={row} onUpdated={load} />

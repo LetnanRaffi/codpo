@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
 import { ChatRoom } from "@/app/(main)/chat/[id]/chat-room";
-import { getListing } from "@/lib/server/marketplace";
+import { getListing, publicObjectUrl } from "@/lib/server/marketplace";
 import { createClient } from "@/lib/supabase/server";
 
 interface ChatRoomPageProps {
@@ -20,11 +20,12 @@ export default async function ChatRoomPage({ params }: ChatRoomPageProps) {
     data: { user },
   } = await db.auth.getUser();
   if (!user) redirect(`/login?next=/chat/${id}`);
-  const { data: conversation } = await db
+  const { data: conversation, error: conversationError } = await db
     .from("conversations")
     .select("id,listing_id,buyer_id,seller_id,created_at,last_message_at")
     .eq("id", id)
     .maybeSingle();
+  if (conversationError) throw conversationError;
   if (!conversation) notFound();
   const otherId =
     conversation.buyer_id === user.id
@@ -40,6 +41,8 @@ export default async function ChatRoomPage({ params }: ChatRoomPageProps) {
       .order("created_at", { ascending: true })
       .limit(300),
   ]);
+  if (profileResult.error) throw profileResult.error;
+  if (messagesResult.error) throw messagesResult.error;
   if (!listing) notFound();
 
   return (
@@ -55,9 +58,16 @@ export default async function ChatRoomPage({ params }: ChatRoomPageProps) {
       listing={listing}
       currentUserId={user.id}
       otherName={profileResult.data?.name ?? "Pengguna"}
+      mediaUrlPrefix={
+        process.env.R2_PUBLIC_BASE_URL
+          ? `${process.env.R2_PUBLIC_BASE_URL.replace(/\/$/, "")}/`
+          : "/api/media?key="
+      }
       initialMessages={(messagesResult.data ?? []).map((message) => ({
         ...message,
-        image_url: null,
+        image_url: message.media_key
+          ? publicObjectUrl(message.media_key)
+          : null,
       }))}
     />
   );

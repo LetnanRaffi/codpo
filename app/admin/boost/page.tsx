@@ -14,11 +14,14 @@ interface Product {
 export default function Page() {
   const [rows, setRows] = useState<Product[]>([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [pendingCode, setPendingCode] = useState("");
   const load = useCallback(
     () =>
       apiFetch<{ items: Product[] }>("/api/admin/boost/products")
         .then((data) => setRows(data.items))
-        .catch((cause) => setError(cause.message)),
+        .catch((cause) => setError(cause.message))
+        .finally(() => setLoading(false)),
     [],
   );
   useEffect(() => {
@@ -26,6 +29,7 @@ export default function Page() {
   }, [load]);
   async function save(row: Product, patch: Partial<Product>) {
     setError("");
+    setPendingCode(row.code);
     try {
       await apiFetch(`/api/admin/boost/products/${row.code}`, {
         method: "PATCH",
@@ -34,6 +38,8 @@ export default function Page() {
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Gagal");
+    } finally {
+      setPendingCode("");
     }
   }
   return (
@@ -45,6 +51,9 @@ export default function Page() {
         </p>
       </div>
       {error && <p className="text-sm text-bu-red-deep">{error}</p>}
+      {loading && (
+        <p className="text-sm text-muted-foreground">Memuat produk boost…</p>
+      )}
       <div className="grid gap-3 md:grid-cols-3">
         {rows.map((row) => (
           <div key={row.code} className="rounded-xl border bg-card p-5">
@@ -71,6 +80,7 @@ export default function Page() {
                   if (price !== row.price_idr)
                     void save(row, { price_idr: price });
                 }}
+                disabled={pendingCode === row.code}
               />
             </div>
             <Button
@@ -78,11 +88,21 @@ export default function Page() {
               size="sm"
               className="mt-4 w-full rounded-full"
               onClick={() => void save(row, { active: !row.active })}
+              disabled={pendingCode === row.code}
             >
-              {row.active ? "Nonaktifkan" : "Aktifkan"}
+              {pendingCode === row.code
+                ? "Menyimpan…"
+                : row.active
+                  ? "Nonaktifkan"
+                  : "Aktifkan"}
             </Button>
           </div>
         ))}
+        {!loading && rows.length === 0 && (
+          <p className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
+            Belum ada produk boost.
+          </p>
+        )}
       </div>
     </div>
   );

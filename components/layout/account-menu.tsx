@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,7 +44,8 @@ function ThemeMenuItem() {
 }
 
 export function AccountMenu() {
-  const { user, profile, loading, signOut, setMode } = useAuth();
+  const { user, profile, loading, error, signOut, setMode } = useAuth();
+  const [actionError, setActionError] = useState("");
   const name = profile?.name ?? user?.email ?? "Pengguna";
 
   return (
@@ -79,7 +81,15 @@ export function AccountMenu() {
             <DropdownMenuItem
               onSelect={(event) => {
                 event.preventDefault();
-                void setMode(profile?.mode === "seller" ? "buyer" : "seller");
+                void setMode(
+                  profile?.mode === "seller" ? "buyer" : "seller",
+                ).catch((cause) =>
+                  setActionError(
+                    cause instanceof Error
+                      ? cause.message
+                      : "Gagal mengubah mode",
+                  ),
+                );
               }}
             >
               Ganti ke mode {profile?.mode === "seller" ? "pembeli" : "penjual"}
@@ -92,7 +102,15 @@ export function AccountMenu() {
             <DropdownMenuSeparator />
             <ThemeMenuItem />
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => void signOut()}>
+            <DropdownMenuItem
+              onSelect={() =>
+                void signOut().catch((cause) =>
+                  setActionError(
+                    cause instanceof Error ? cause.message : "Gagal keluar",
+                  ),
+                )
+              }
+            >
               Keluar
             </DropdownMenuItem>
           </>
@@ -110,6 +128,11 @@ export function AccountMenu() {
           </>
         )}
         {loading && <DropdownMenuItem disabled>Memuat sesi…</DropdownMenuItem>}
+        {(error || actionError) && (
+          <DropdownMenuItem disabled className="text-bu-red-deep">
+            {actionError || error}
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

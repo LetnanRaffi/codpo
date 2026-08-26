@@ -2,7 +2,7 @@
 
 import { CheckCircle2, Flame, ImagePlus, MapPin, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,6 +36,7 @@ export function SellForm({ categories }: { categories: Category[] }) {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
+  const objectUrlsRef = useRef(new Set<string>());
   const [photos, setPhotos] = useState<
     { url: string; name: string; file: File }[]
   >([]);
@@ -56,23 +57,42 @@ export function SellForm({ categories }: { categories: Category[] }) {
     null,
   );
 
+  useEffect(() => {
+    const urls = objectUrlsRef.current;
+    return () => {
+      for (const url of urls) URL.revokeObjectURL(url);
+      urls.clear();
+    };
+  }, []);
+
   function addPhotos(files: FileList | null) {
     if (!files) return;
     const room = MAX_PHOTOS - photos.length;
-    const next = Array.from(files)
-      .slice(0, room)
-      .filter(
-        (file) =>
-          ["image/jpeg", "image/png", "image/webp"].includes(file.type) &&
-          file.size <= 5 * 1024 * 1024,
-      )
-      .map((f) => ({ url: URL.createObjectURL(f), name: f.name, file: f }));
+    const selected = Array.from(files).slice(0, room);
+    const accepted = selected.filter(
+      (file) =>
+        ["image/jpeg", "image/png", "image/webp"].includes(file.type) &&
+        file.size <= 5 * 1024 * 1024,
+    );
+    const next = accepted.map((f) => {
+      const url = URL.createObjectURL(f);
+      objectUrlsRef.current.add(url);
+      return { url, name: f.name, file: f };
+    });
+    if (accepted.length !== selected.length || files.length > room) {
+      setError(
+        `Sebagian foto dilewati. Gunakan JPG, PNG, atau WebP maksimal 5 MB; maksimal ${MAX_PHOTOS} foto.`,
+      );
+    } else {
+      setError("");
+    }
     setPhotos((p) => [...p, ...next]);
     if (fileRef.current) fileRef.current.value = "";
   }
 
   function removePhoto(url: string) {
     URL.revokeObjectURL(url);
+    objectUrlsRef.current.delete(url);
     setPhotos((p) => p.filter((x) => x.url !== url));
   }
 
@@ -107,6 +127,7 @@ export function SellForm({ categories }: { categories: Category[] }) {
     }
 
     setPending(true);
+    let createdId: string | null = null;
     try {
       const durationMs =
         buDuration === "7d"
@@ -134,6 +155,7 @@ export function SellForm({ categories }: { categories: Category[] }) {
           lng: position.lng,
         }),
       });
+      createdId = created.id;
       const supabase = createClient();
       for (let index = 0; index < photos.length; index++) {
         const photo = photos[index];
@@ -165,11 +187,21 @@ export function SellForm({ categories }: { categories: Category[] }) {
           });
         if (imageError) throw imageError;
       }
-      for (const photo of photos) URL.revokeObjectURL(photo.url);
+      for (const photo of photos) {
+        URL.revokeObjectURL(photo.url);
+        objectUrlsRef.current.delete(photo.url);
+      }
       setSubmitted(true);
       router.push(`/listing/${created.id}`);
       router.refresh();
     } catch (cause) {
+      if (createdId) {
+        await apiFetch(`/api/listings/${createdId}`, {
+          method: "DELETE",
+        }).catch((cleanupError) =>
+          console.error("[sell.cleanup]", cleanupError),
+        );
+      }
       setError(
         cause instanceof Error ? cause.message : "Gagal memasang listing",
       );

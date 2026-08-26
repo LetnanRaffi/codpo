@@ -33,14 +33,18 @@ export async function GET(req: Request) {
       ),
     ];
     const admin = createAdminClient();
-    const [{ data: listings }, { data: profiles }] = await Promise.all([
+    const [listingsResult, profilesResult] = await Promise.all([
       listingIds.length
         ? admin.from("listings").select("id,title").in("id", listingIds)
-        : Promise.resolve({ data: [] }),
+        : Promise.resolve({ data: [], error: null }),
       otherIds.length
         ? db.from("profiles").select("id,name").in("id", otherIds)
-        : Promise.resolve({ data: [] }),
+        : Promise.resolve({ data: [], error: null }),
     ]);
+    if (listingsResult.error) throw listingsResult.error;
+    if (profilesResult.error) throw profilesResult.error;
+    const listings = listingsResult.data;
+    const profiles = profilesResult.data;
     const titles = new Map(
       (listings ?? []).map((item) => [item.id, item.title]),
     );

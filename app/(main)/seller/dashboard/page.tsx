@@ -29,48 +29,53 @@ export default async function SellerDashboardPage() {
     data: { user },
   } = await db.auth.getUser();
   if (!user) redirect("/login?next=/seller/dashboard");
-  const [
-    { data: listings },
-    { data: transactions },
-    { count: codOpen },
-    { data: reputation },
-  ] = await Promise.all([
-    db
-      .from("listings")
-      .select(
-        "id,title,normal_price,bu_price,sale_type,status,views,boosted_until,created_at",
-      )
-      .eq("seller_id", user.id)
-      .order("created_at", { ascending: false }),
-    db
-      .from("transactions")
-      .select(
-        "id,listing_id,buyer_id,status,agreed_price,created_at,cod_sessions(id,state,scheduled_at)",
-      )
-      .eq("seller_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(50),
-    db
-      .from("cod_requests")
-      .select("id", { count: "exact", head: true })
-      .eq("seller_id", user.id)
-      .eq("status", "requested"),
-    db
-      .from("user_reputation")
-      .select("avg_rating,completed_transactions")
-      .eq("user_id", user.id)
-      .maybeSingle(),
-  ]);
+  const [listingsResult, transactionsResult, codOpenResult, reputationResult] =
+    await Promise.all([
+      db
+        .from("listings")
+        .select(
+          "id,title,normal_price,bu_price,sale_type,status,views,boosted_until,created_at",
+        )
+        .eq("seller_id", user.id)
+        .order("created_at", { ascending: false }),
+      db
+        .from("transactions")
+        .select(
+          "id,listing_id,buyer_id,status,agreed_price,created_at,cod_sessions(id,state,scheduled_at)",
+        )
+        .eq("seller_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(50),
+      db
+        .from("cod_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("seller_id", user.id)
+        .eq("status", "requested"),
+      db
+        .from("user_reputation")
+        .select("avg_rating,completed_transactions")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+    ]);
+  if (listingsResult.error) throw listingsResult.error;
+  if (transactionsResult.error) throw transactionsResult.error;
+  if (codOpenResult.error) throw codOpenResult.error;
+  if (reputationResult.error) throw reputationResult.error;
+  const listings = listingsResult.data;
+  const transactions = transactionsResult.data;
+  const codOpen = codOpenResult.count;
+  const reputation = reputationResult.data;
   const rows = listings ?? [];
   const names = new Map<string, string>();
   const buyerIds = [
     ...new Set((transactions ?? []).map((item) => item.buyer_id)),
   ];
   if (buyerIds.length) {
-    const { data } = await db
+    const { data, error } = await db
       .from("profiles")
       .select("id,name")
       .in("id", buyerIds);
+    if (error) throw error;
     for (const profile of data ?? []) names.set(profile.id, profile.name);
   }
   const listingNames = new Map(rows.map((item) => [item.id, item.title]));
@@ -143,7 +148,6 @@ export default async function SellerDashboardPage() {
                 <th className="px-4 py-3">Barang</th>
                 <th className="px-4 py-3">Harga</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Aksi</th>
                 <th className="px-4 py-3">Dilihat</th>
                 <th className="px-4 py-3 text-right">Aksi</th>
               </tr>
@@ -180,6 +184,17 @@ export default async function SellerDashboardPage() {
                   </tr>
                 );
               })}
+              {rows.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-10 text-center text-muted-foreground"
+                  >
+                    Belum ada listing. Pasang barang pertamamu untuk mulai
+                    jualan.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -196,6 +211,7 @@ export default async function SellerDashboardPage() {
                 <th className="px-4 py-3">Buyer</th>
                 <th className="px-4 py-3">Nilai</th>
                 <th className="px-4 py-3">COD</th>
+                <th className="px-4 py-3">Tindakan</th>
                 <th className="px-4 py-3">Status</th>
               </tr>
             </thead>
@@ -236,6 +252,16 @@ export default async function SellerDashboardPage() {
                   </td>
                 </tr>
               ))}
+              {(transactions ?? []).length === 0 && (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-10 text-center text-muted-foreground"
+                  >
+                    Belum ada transaksi atau sesi COD.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

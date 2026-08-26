@@ -51,7 +51,9 @@ export default async function AdminPage() {
     let query = admin.from(table).select("id", { count: "exact", head: true });
     for (const [key, value] of Object.entries(filters))
       query = query.eq(key, value);
-    return (await query).count ?? 0;
+    const { count: total, error } = await query;
+    if (error) throw error;
+    return total ?? 0;
   };
   const [users, active, bu, reports, suspended, reported] = await Promise.all([
     count("profiles"),

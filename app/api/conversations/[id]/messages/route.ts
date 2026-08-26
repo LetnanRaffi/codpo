@@ -42,6 +42,12 @@ export async function POST(req: Request, ctx: Ctx) {
     const { id } = await ctx.params;
     const body = await parseBody(req, messageSendSchema);
     const db = userClient(req);
+    if (
+      body.type === "image" &&
+      !body.media_key?.startsWith(`chats/${user.id}/`)
+    ) {
+      throw new ApiError(403, "media_key bukan milikmu");
+    }
 
     const { data, error } = await db
       .from("messages")

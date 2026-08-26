@@ -49,6 +49,7 @@ export interface Message {
   sender_id: string;
   type: MessageType;
   body: string;
+  media_key?: string | null;
   image_url?: string | null;
   cod_status?: "requested" | "accepted" | "rejected";
   created_at: string;

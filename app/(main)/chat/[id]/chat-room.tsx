@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   Flame,
+  ImagePlus,
   MapPin,
   Navigation,
   SendHorizontal,
@@ -29,6 +30,12 @@ function initials(name: string) {
     .slice(0, 2)
     .join("")
     .toUpperCase();
+}
+
+function mediaUrl(prefix: string, key: string) {
+  return prefix.endsWith("key=")
+    ? `${prefix}${encodeURIComponent(key)}`
+    : `${prefix}${key}`;
 }
 
 function Bubble({
@@ -59,8 +66,13 @@ function Bubble({
   }
 
   if (message.type === "location") {
+    const mapUrl = message.body.match(
+      /https:\/\/maps\.google\.com\/\?q=[^\s]+/,
+    )?.[0];
     return (
-      <div className="flex justify-start">
+      <div
+        className={`flex ${message.sender_id === currentUserId ? "justify-end" : "justify-start"}`}
+      >
         <div className="w-56 overflow-hidden rounded-xl border">
           <div
             aria-hidden
@@ -68,7 +80,21 @@ function Bubble({
           >
             <MapPin className="size-5 text-bu-red" />
           </div>
-          <p className="px-3 py-2 text-xs">{message.body}</p>
+          <div className="px-3 py-2 text-xs">
+            <p>
+              {message.body.replace(mapUrl ?? "", "").trim() || "Lokasi saya"}
+            </p>
+            {mapUrl && (
+              <a
+                href={mapUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-bu-red hover:underline"
+              >
+                Buka di Google Maps
+              </a>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -76,13 +102,25 @@ function Bubble({
 
   if (message.type === "image") {
     return (
-      <div className="flex justify-start">
+      <div
+        className={`flex ${message.sender_id === currentUserId ? "justify-end" : "justify-start"}`}
+      >
         <div className="w-44 overflow-hidden rounded-xl border">
-          <div
-            aria-hidden
-            className="flex aspect-square items-center justify-center bg-paper-soft font-display text-4xl font-bold text-ink/10"
-          >
-            IMG
+          <div className="relative aspect-square bg-paper-soft">
+            {message.image_url ? (
+              /* Endpoint chat diminta langsung oleh browser agar cookie
+                 participant ikut terkirim. */
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={message.image_url}
+                alt={message.body || "Gambar chat"}
+                className="size-full object-cover"
+              />
+            ) : (
+              <div className="flex size-full items-center justify-center font-display text-4xl font-bold text-ink/10">
+                IMG
+              </div>
+            )}
           </div>
           <p className="truncate px-3 py-2 font-mono text-[11px] text-muted-foreground">
             {message.body}
@@ -111,12 +149,14 @@ export function ChatRoom({
   listing,
   currentUserId,
   otherName,
+  mediaUrlPrefix,
   initialMessages,
 }: {
   conversation: Conversation;
   listing: Listing;
   currentUserId: string;
   otherName: string;
+  mediaUrlPrefix: string;
   initialMessages: Message[];
 }) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -124,6 +164,7 @@ export function ChatRoom({
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -139,6 +180,9 @@ export function ChatRoom({
         },
         (payload) => {
           const message = payload.new as Message;
+          if (message.media_key) {
+            message.image_url = mediaUrl(mediaUrlPrefix, message.media_key);
+          }
           setMessages((current) =>
             current.some((item) => item.id === message.id)
               ? current
@@ -150,12 +194,20 @@ export function ChatRoom({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [conversation.id]);
+  }, [conversation.id, mediaUrlPrefix]);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  useEffect(() => {
+    const latest = messages.at(-1);
+    if (!latest || document.hidden) return;
+    void apiFetch(`/api/conversations/${conversation.id}/read`, {
+      method: "PATCH",
+    }).catch((cause) => console.error("[chat.read]", cause));
+  }, [conversation.id, currentUserId, messages]);
 
   async function handleQuickAction() {
     if (!navigator.geolocation) {
@@ -206,6 +258,72 @@ export function ChatRoom({
       setError(cause instanceof Error ? cause.message : "Gagal mengirim pesan");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleImage(file: File | undefined) {
+    if (!file) return;
+    if (
+      !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+      file.size > 5 * 1024 * 1024
+    ) {
+      setError("Gunakan JPG, PNG, atau WebP maksimal 5 MB.");
+      return;
+    }
+    setSending(true);
+    setError("");
+    try {
+      const signed = await apiFetch<{
+        key: string;
+        upload_url: string;
+        headers: Record<string, string>;
+      }>("/api/upload/presign", {
+        method: "POST",
+        body: JSON.stringify({
+          kind: "chat",
+          mime: file.type,
+          size: file.size,
+        }),
+      });
+      const upload = await fetch(signed.upload_url, {
+        method: "PUT",
+        headers: signed.headers,
+        body: file,
+      });
+      if (!upload.ok) throw new Error("Upload gambar gagal");
+      const sent = await apiFetch<{ id: string; created_at: string }>(
+        `/api/conversations/${conversation.id}/messages`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            type: "image",
+            body: file.name,
+            media_key: signed.key,
+          }),
+        },
+      );
+      setMessages((current) =>
+        current.some((item) => item.id === sent.id)
+          ? current
+          : [
+              ...current,
+              {
+                ...sent,
+                sender_id: currentUserId,
+                type: "image",
+                body: file.name,
+                media_key: signed.key,
+                image_url: mediaUrl(mediaUrlPrefix, signed.key),
+              },
+            ],
+      );
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Gagal mengirim gambar",
+      );
+    } finally {
+      setSending(false);
+      if (imageRef.current) imageRef.current.value = "";
     }
   }
 
@@ -313,6 +431,24 @@ export function ChatRoom({
 
       {/* Input */}
       <form onSubmit={handleSend} className="flex items-center gap-2 px-4 py-3">
+        <input
+          ref={imageRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          hidden
+          onChange={(event) => void handleImage(event.target.files?.[0])}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="shrink-0 rounded-full"
+          disabled={sending}
+          onClick={() => imageRef.current?.click()}
+          aria-label="Kirim gambar"
+        >
+          <ImagePlus className="size-4" aria-hidden />
+        </Button>
         <Input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
