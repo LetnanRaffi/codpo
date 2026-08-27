@@ -34,7 +34,10 @@ export function listingFromRow(
     bu_expires_at: row.bu_expires_at == null ? null : String(row.bu_expires_at),
     images: extra.images ?? [],
     area_label: String(row.area_label ?? "Indonesia"),
-    distance_km: row.distance_km == null ? 0 : Number(row.distance_km),
+    approx_lat: row.approx_lat == null ? null : Number(row.approx_lat),
+    approx_lng: row.approx_lng == null ? null : Number(row.approx_lng),
+    distance_km: row.distance_km == null ? null : Number(row.distance_km),
+    within_radius: Boolean(row.within_radius ?? false),
     cod_available: Boolean(row.cod_available),
     seller_rating: Number(row.seller_rating ?? extra.seller?.rating ?? 0),
     seller: extra.seller ?? {

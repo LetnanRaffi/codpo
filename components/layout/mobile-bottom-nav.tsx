@@ -1,6 +1,6 @@
 "use client";
 
-import { House, Plus, ReceiptText, Search, UserRound } from "lucide-react";
+import { House, MessageCircle, Plus, ReceiptText, Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -11,7 +11,7 @@ const ITEMS = [
   { href: "/search", label: "Cari", icon: Search },
   { href: "/sell", label: "Jual", icon: Plus, primary: true },
   { href: "/transactions", label: "Transaksi", icon: ReceiptText },
-  { href: "/profile", label: "Profil", icon: UserRound },
+  { href: "/chat", label: "Chat", icon: MessageCircle },
 ] as const;
 
 export function MobileBottomNav() {

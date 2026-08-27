@@ -217,7 +217,10 @@ function mapRow(row: SearchRow): Listing {
     bu_expires_at: null,
     images: Array.isArray(row.images) ? row.images.map(String) : [],
     area_label: String(row.area_label ?? "Indonesia"),
-    distance_km: Number(row.distance_km ?? 0),
+    approx_lat: row.approx_lat == null ? null : Number(row.approx_lat),
+    approx_lng: row.approx_lng == null ? null : Number(row.approx_lng),
+    distance_km: row.distance_km == null ? null : Number(row.distance_km),
+    within_radius: Boolean(row.within_radius ?? false),
     cod_available: Boolean(row.cod_available),
     seller_rating: rating,
     seller: {

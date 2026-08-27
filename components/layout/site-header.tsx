@@ -68,7 +68,7 @@ export function SiteHeader() {
   }, [user]);
   return (
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
-      <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-2 px-4 md:h-16 md:gap-4">
+      <div className="mx-auto flex min-h-14 w-full max-w-7xl flex-wrap items-center gap-2 px-4 py-2 md:h-16 md:flex-nowrap md:gap-4 md:py-0">
         <Link
           href="/"
           aria-label="CODPO — ke beranda"
@@ -87,7 +87,9 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        <SearchBar />
+        <div className="order-last basis-full md:order-none md:min-w-0 md:flex-1">
+          <SearchBar />
+        </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1 md:gap-1.5">
           <LocationPicker />

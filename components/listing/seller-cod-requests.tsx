@@ -53,6 +53,17 @@ export function SellerCodRequests() {
       setPendingId("");
     }
   }
+  async function counter(row: RequestRow) {
+    const date = window.prompt("Tanggal baru (YYYY-MM-DD)", row.preferred_date);
+    const time = window.prompt("Jam baru (HH:MM)", row.preferred_time);
+    if (!date || !time) return;
+    setPendingId(row.id); setError("");
+    try {
+      await apiFetch(`/api/cod/requests/${row.id}`, { method: "PATCH", body: JSON.stringify({ action: "counter", request_id: row.id, counter_date: date, counter_time: time, counter_meeting_point: row.meeting_point, counter_meeting_lat: -6.2, counter_meeting_lng: 106.816 }) });
+      await load();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Gagal mengusulkan jadwal"); }
+    finally { setPendingId(""); }
+  }
   const pending = rows.filter((row) => row.status === "requested");
   return (
     <section className="space-y-3">
@@ -106,6 +117,7 @@ export function SellerCodRequests() {
                 >
                   Tolak
                 </Button>
+                <Button size="sm" variant="outline" className="flex-1 rounded-full" onClick={() => void counter(row)} disabled={pendingId === row.id}>Usul waktu</Button>
               </div>
             </div>
           ))}

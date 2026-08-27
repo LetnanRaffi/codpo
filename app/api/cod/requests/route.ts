@@ -43,6 +43,7 @@ export async function POST(req: Request) {
         preferred_date: body.preferred_date,
         preferred_time: body.preferred_time,
         meeting_point: body.meeting_point,
+        meeting_geom: `SRID=4326;POINT(${body.meeting_lng} ${body.meeting_lat})`,
         note: body.note ?? null,
       })
       .select("id")

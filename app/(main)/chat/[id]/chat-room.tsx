@@ -398,6 +398,11 @@ export function ChatRoom({
         <CodRequestDialog
           listingId={listing.id}
           listingTitle={listing.title}
+          meetingFallback={
+            listing.approx_lat != null && listing.approx_lng != null
+              ? { lat: listing.approx_lat, lng: listing.approx_lng }
+              : null
+          }
           conversationId={conversation.id}
           trigger={
             <button

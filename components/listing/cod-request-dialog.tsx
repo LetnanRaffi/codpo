@@ -19,22 +19,27 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { MapPicker } from "@/components/map/map-picker";
+import type { MapCoordinate } from "@/components/map/map-canvas";
 
 export function CodRequestDialog({
   listingTitle,
   listingId,
   conversationId,
+  meetingFallback,
   trigger,
 }: {
   listingTitle: string;
   listingId: string;
   conversationId?: string;
+  meetingFallback?: MapCoordinate | null;
   trigger: React.ReactNode;
 }) {
   const [sent, setSent] = useState(false);
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [meetingPoint, setMeetingPoint] = useState<MapCoordinate | null>(null);
   const { user } = useAuth();
   const router = useRouter();
 
@@ -55,6 +60,8 @@ export function CodRequestDialog({
           preferred_date: data.get("date"),
           preferred_time: data.get("time"),
           meeting_point: data.get("place"),
+          meeting_lat: meetingPoint?.lat,
+          meeting_lng: meetingPoint?.lng,
           note: data.get("note") || undefined,
         }),
       });
@@ -71,7 +78,11 @@ export function CodRequestDialog({
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
-        if (!v) setSent(false);
+        if (v) setMeetingPoint(meetingFallback ?? { lat: -6.2, lng: 106.816666 });
+        else {
+          setSent(false);
+          setMeetingPoint(null);
+        }
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
@@ -141,6 +152,13 @@ export function CodRequestDialog({
                   className="rounded-lg"
                 />
               </div>
+              {meetingPoint && (
+                <MapPicker
+                  value={meetingPoint}
+                  fallback={meetingPoint}
+                  onChange={setMeetingPoint}
+                />
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor="cod-note">Catatan (opsional)</Label>
                 <Textarea

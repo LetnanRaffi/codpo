@@ -180,6 +180,11 @@ export default async function ListingPage({ params }: ListingPageProps) {
         <CodRequestDialog
           listingId={listing.id}
           listingTitle={listing.title}
+          meetingFallback={
+            listing.approx_lat != null && listing.approx_lng != null
+              ? { lat: listing.approx_lat, lng: listing.approx_lng }
+              : null
+          }
           trigger={
             <Button size="lg" className="flex-1 rounded-full font-bold">
               Ajukan COD
@@ -254,6 +259,11 @@ export default async function ListingPage({ params }: ListingPageProps) {
           <CodRequestDialog
             listingId={listing.id}
             listingTitle={listing.title}
+            meetingFallback={
+              listing.approx_lat != null && listing.approx_lng != null
+                ? { lat: listing.approx_lat, lng: listing.approx_lng }
+                : null
+            }
             trigger={
               <Button className="flex-1 rounded-full font-bold">
                 Ajukan COD

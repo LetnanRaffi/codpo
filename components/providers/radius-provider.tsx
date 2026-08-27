@@ -7,15 +7,15 @@ import { DEFAULT_RADIUS_KM } from "@/lib/config";
 interface RadiusState {
   radiusKm: number;
   setRadiusKm: (km: number) => void;
-  position: { lat: number; lng: number } | null;
-  setPosition: (position: { lat: number; lng: number } | null) => void;
+  position: { lat: number; lng: number; label?: string } | null;
+  setPosition: (position: { lat: number; lng: number; label?: string } | null) => void;
 }
 
 const RadiusContext = createContext<RadiusState | null>(null);
 
 export function RadiusProvider({ children }: { children: React.ReactNode }) {
   const [radiusKm, setRadiusKm] = useState<number>(DEFAULT_RADIUS_KM);
-  const [position, setPosition] = useState<{ lat: number; lng: number } | null>(
+  const [position, setPosition] = useState<{ lat: number; lng: number; label?: string } | null>(
     null,
   );
   useEffect(() => {
@@ -37,7 +37,7 @@ export function RadiusProvider({ children }: { children: React.ReactNode }) {
     setRadiusKm(km);
     localStorage.setItem("codpo-radius", String(km));
   };
-  const updatePosition = (next: { lat: number; lng: number } | null) => {
+  const updatePosition = (next: { lat: number; lng: number; label?: string } | null) => {
     setPosition(next);
     if (next) localStorage.setItem("codpo-location", JSON.stringify(next));
     else localStorage.removeItem("codpo-location");

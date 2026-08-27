@@ -36,12 +36,28 @@ export async function PATCH(req: Request, ctx: Ctx) {
         if (error) throw error;
         return ok({ rejected: true });
       }
+      case "accept_counter": {
+        const { data, error } = await db.rpc("accept_cod_counter", {
+          p_request_id: id,
+        });
+        if (error) throw error;
+        return ok({ session_id: data });
+      }
+      case "cancel": {
+        const { error } = await db.rpc("cancel_cod_request", {
+          p_request_id: id,
+        });
+        if (error) throw error;
+        return ok({ cancelled: true });
+      }
       case "counter": {
         const { error } = await db.rpc("counter_cod_request", {
           p_request_id: id,
           p_date: body.counter_date,
           p_time: body.counter_time,
           p_point: body.counter_meeting_point,
+          p_lat: body.counter_meeting_lat,
+          p_lng: body.counter_meeting_lng,
         });
         if (error) throw error;
         return ok({ countered: true });

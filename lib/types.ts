@@ -31,7 +31,10 @@ export interface Listing {
   bu_expires_at: string | null;
   images: string[];
   area_label: string;
-  distance_km: number;
+  approx_lat: number | null;
+  approx_lng: number | null;
+  distance_km: number | null;
+  within_radius: boolean;
   cod_available: boolean;
   seller_rating: number;
   seller: SellerProfile;

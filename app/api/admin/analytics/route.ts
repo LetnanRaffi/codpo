@@ -27,6 +27,11 @@ export async function GET(req: Request) {
       transactions_completed,
       cod_sessions_active,
       reports_open,
+      requests_30d,
+      accepted_30d,
+      otw_30d,
+      completed_30d,
+      cancelled_30d,
     ] = await Promise.all([
       count("profiles"),
       count("profiles", { status: "suspended" }),
@@ -37,6 +42,11 @@ export async function GET(req: Request) {
       count("transactions", { status: "completed" }),
       count("cod_sessions", { state: "scheduled" }),
       count("reports", { status: "open" }),
+      countSince(db, "cod_requests", "created_at"),
+      countSince(db, "cod_requests", "responded_at", "status", "accepted"),
+      countSince(db, "cod_sessions", "started_at", "state", "otw"),
+      countSince(db, "transactions", "completed_at", "status", "completed"),
+      countSince(db, "transactions", "created_at", "status", "cancelled"),
     ]);
 
     return ok({
@@ -53,9 +63,25 @@ export async function GET(req: Request) {
       transactions: { completed: transactions_completed },
       cod_sessions_scheduled: cod_sessions_active,
       reports_open,
+      validation: {
+        target_completed_30d: 20,
+        requests_30d,
+        accepted_30d,
+        otw_30d,
+        completed_30d,
+        cancelled_30d,
+        progress_pct: Math.min(100, Math.round((completed_30d / 20) * 100)),
+      },
       generated_at: new Date().toISOString(),
     });
   } catch (e) {
     return handleError(e);
   }
+}
+
+async function countSince(db: ReturnType<typeof createAdminClient>, table: string, column: string, statusColumn?: string, status?: string) {
+  let query = db.from(table).select("id", { count: "exact", head: true }).gte(column, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+  if (status && statusColumn) query = query.eq(statusColumn, status);
+  const { count } = await query;
+  return count ?? 0;
 }

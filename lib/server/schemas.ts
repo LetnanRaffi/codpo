@@ -80,6 +80,8 @@ export const codRequestCreateSchema = z.object({
   preferred_date: z.string().date(),
   preferred_time: z.string().time(),
   meeting_point: z.string().trim().min(3).max(200),
+  meeting_lat: z.number().min(-90).max(90),
+  meeting_lng: z.number().min(-180).max(180),
   note: z.string().max(500).optional(),
 });
 
@@ -91,10 +93,18 @@ export const codRequestDecisionSchema = z.discriminatedUnion("action", [
     action: z.literal("reject"),
   }),
   z.object({
+    action: z.literal("accept_counter"),
+  }),
+  z.object({
+    action: z.literal("cancel"),
+  }),
+  z.object({
     action: z.literal("counter"),
     counter_date: z.string().date(),
     counter_time: z.string().time(),
     counter_meeting_point: z.string().trim().min(3).max(200),
+    counter_meeting_lat: z.number().min(-90).max(90),
+    counter_meeting_lng: z.number().min(-180).max(180),
   }),
 ]);
 

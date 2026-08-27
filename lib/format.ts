@@ -2,7 +2,8 @@ export function formatIDR(amount: number): string {
   return `Rp${amount.toLocaleString("id-ID")}`;
 }
 
-export function formatDistance(km: number): string {
+export function formatDistance(km: number | null): string {
+  if (km === null || !Number.isFinite(km)) return "jarak tidak diketahui";
   return `${km.toLocaleString("id-ID", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 1,

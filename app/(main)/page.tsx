@@ -47,7 +47,7 @@ export default async function HomePage() {
   ]);
   const buTerdekat = listings
     .filter((l) => l.sale_type === "BU")
-    .sort((a, b) => a.distance_km - b.distance_km);
+    .sort((a, b) => (a.distance_km ?? Number.POSITIVE_INFINITY) - (b.distance_km ?? Number.POSITIVE_INFINITY));
   const baruDitambahkan = [...listings].sort(
     (a, b) => +new Date(b.created_at) - +new Date(a.created_at),
   );

@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { CodSessionActions } from "@/components/listing/cod-session-actions";
+import { BuyerCodRequests } from "@/components/listing/buyer-cod-requests";
 import { ReviewDialog } from "@/components/listing/review-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
@@ -187,6 +188,9 @@ function TransactionCard({
           </div>
           {row.cod_sessions?.id && (
             <div className="mt-3">
+              <Button size="sm" variant="outline" className="mb-2 w-full rounded-full" asChild>
+                <Link href={`/cod/${row.cod_sessions.id}`}>Lihat peta COD real-time</Link>
+              </Button>
               <CodSessionActions
                 sessionId={row.cod_sessions.id}
                 state={codStatus}
@@ -281,6 +285,8 @@ export default function TransactionsPage() {
           Semua COD kamu
         </p>
       </div>
+
+      <BuyerCodRequests onChanged={() => void load()} />
 
       <div
         role="tablist"

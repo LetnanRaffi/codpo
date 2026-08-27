@@ -68,13 +68,13 @@ export function ListingCard({
           </p>
         </div>
 
-        <div className="flex items-center gap-x-2.5 pt-0.5 font-mono text-[11px] text-muted-foreground">
-          <span className="inline-flex items-center gap-0.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pt-0.5 font-mono text-[11px] text-muted-foreground">
+          <span className="inline-flex shrink-0 items-center gap-0.5">
             <MapPin className="size-3" aria-hidden />
             {formatDistance(listing.distance_km)}
           </span>
           {listing.cod_available ? (
-            <span className="inline-flex items-center gap-1 font-sans font-medium text-trust-green">
+            <span className="inline-flex shrink-0 items-center gap-1 font-sans font-medium text-trust-green">
               <span
                 className="size-1.5 rounded-full bg-trust-green"
                 aria-hidden
@@ -82,9 +82,9 @@ export function ListingCard({
               COD sekarang
             </span>
           ) : (
-            <span>COD by request</span>
+            <span className="shrink-0">COD by request</span>
           )}
-          <span className="ml-auto inline-flex items-center gap-0.5">
+          <span className="ml-auto inline-flex shrink-0 items-center gap-0.5">
             <Star className="size-3 fill-gold text-gold" aria-hidden />
             {listing.seller_rating.toLocaleString("id-ID")}
           </span>

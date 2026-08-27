@@ -16,23 +16,33 @@ export async function GET(req: Request, ctx: Ctx) {
     const { id } = await ctx.params;
     const db = userClient(req);
 
-    const { data: session } = await db
-      .from("cod_sessions")
+    const { data: session, error: sessionError } = await db
+      .from("cod_session_map")
       .select("*")
       .eq("id", id)
       .maybeSingle();
+    if (sessionError) throw sessionError;
     if (!session)
       throw new ApiError(404, "sesi tidak ditemukan / bukan peserta");
 
-    const { data: locations } = await db
-      .from("cod_locations")
-      .select("user_id,geom,accuracy_m,recorded_at")
-      .eq("session_id", id)
-      .order("recorded_at", { ascending: false })
-      .limit(40);
+    const [{ data: locations, error: locationsError }, { data: sharing, error: sharingError }] = await Promise.all([
+      db
+        .from("cod_location_points")
+        .select("id,user_id,lat,lng,accuracy_m,recorded_at")
+        .eq("session_id", id)
+        .order("recorded_at", { ascending: false })
+        .limit(40),
+      db
+        .from("cod_location_sharing")
+        .select("user_id,enabled,started_at,updated_at")
+        .eq("session_id", id),
+    ]);
+    if (locationsError) throw locationsError;
+    if (sharingError) throw sharingError;
 
     return ok({
       session,
+      sharing: sharing ?? [],
       // Titik terakhir per user untuk map; histori dibatasi oleh purge job.
       latest_locations: Object.values(
         (locations ?? []).reduce<Record<string, unknown>>((acc, l) => {

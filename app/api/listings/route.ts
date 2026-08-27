@@ -41,6 +41,9 @@ export async function GET(req: Request) {
     if (minPrice !== null && maxPrice !== null && minPrice > maxPrice) {
       throw new ApiError(422, "harga minimum tidak boleh melebihi maksimum");
     }
+    const lat = num("lat", -90, 90);
+    const lng = num("lng", -180, 180);
+    const radiusM = num("radius_m", 1, 1_000_000);
     const db = userClient(req); // anon tetap bisa — RPC security invoker menghormati RLS
 
     const { data, error } = await db.rpc("search_listings", {
@@ -51,9 +54,9 @@ export async function GET(req: Request) {
       p_max_price: maxPrice,
       p_bu_only: url.searchParams.get("bu_only") === "true",
       p_cod_only: url.searchParams.get("cod_only") === "true",
-      p_lat: num("lat", -90, 90),
-      p_lng: num("lng", -180, 180),
-      p_radius_m: num("radius_m", 1, 1_000_000),
+      p_lat: lat,
+      p_lng: lng,
+      p_radius_m: radiusM,
       p_sort: sort,
       p_limit: Math.min(Math.trunc(num("limit", 1, 50) ?? 24), 50),
       p_offset: Math.trunc(num("offset", 0) ?? 0),
@@ -81,6 +84,10 @@ export async function GET(req: Request) {
     return ok({
       items: rows.map((row) => ({
         ...row,
+        within_radius:
+          row.distance_km != null &&
+          (radiusM ?? Infinity) >=
+            Number(row.distance_km) * 1000,
         images: imageMap.get(String(row.id)) ?? [],
       })),
     });

@@ -11,11 +11,28 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import { RADIUS_OPTIONS_KM } from "@/lib/config";
+import { PILOT_AREAS, RADIUS_OPTIONS_KM } from "@/lib/config";
 
 export function LocationPicker() {
   const { radiusKm, setRadiusKm, position, setPosition } = useRadius();
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState("");
+
+  function useDeviceLocation() {
+    if (!navigator.geolocation) {
+      setError("Browser ini tidak mendukung lokasi. Pilih area manual.");
+      return;
+    }
+    setError("");
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setPosition({ lat: coords.latitude, lng: coords.longitude, label: "Lokasi saya" });
+        setOpen(false);
+      },
+      () => setError("Izin lokasi ditolak. Pilih area manual atau coba lagi."),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
+    );
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -54,21 +71,36 @@ export function LocationPicker() {
           </button>
         ))}
         <Separator className="my-1.5" />
+        <p className="px-2 py-1 text-[11px] text-muted-foreground">
+          Lokasi hanya dipakai untuk mengurutkan listing. Seller jauh tetap tampil.
+        </p>
         <Button
           type="button"
           variant="ghost"
           size="sm"
           className="w-full justify-start"
-          onClick={() => {
-            navigator.geolocation?.getCurrentPosition(({ coords }) => {
-              setPosition({ lat: coords.latitude, lng: coords.longitude });
-              setOpen(false);
-            });
-          }}
+          onClick={useDeviceLocation}
         >
           <MapPin className="size-3.5" />{" "}
           {position ? "Perbarui lokasi" : "Gunakan lokasi perangkat"}
         </Button>
+        <div className="mt-1 grid grid-cols-2 gap-1 px-1">
+          {PILOT_AREAS.map((area) => (
+            <button
+              key={area.label}
+              type="button"
+              className="rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent"
+              onClick={() => {
+                setPosition(area);
+                setError("");
+                setOpen(false);
+              }}
+            >
+              {area.label}
+            </button>
+          ))}
+        </div>
+        {error && <p className="px-2 pt-1 text-xs text-bu-red-deep">{error}</p>}
       </PopoverContent>
     </Popover>
   );
