@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, MapPin } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useRadius } from "@/components/providers/radius-provider";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,14 @@ export function LocationPicker() {
   const { radiusKm, setRadiusKm, position, setPosition } = useRadius();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
+  useEffect(() => {
+    if (position || window.localStorage.getItem("codpo-location-prompted")) return;
+    const timer = window.setTimeout(() => {
+      setOpen(true);
+      window.localStorage.setItem("codpo-location-prompted", "1");
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [position]);
 
   function useDeviceLocation() {
     if (!navigator.geolocation) {
@@ -24,6 +32,7 @@ export function LocationPicker() {
       return;
     }
     setError("");
+    window.localStorage.setItem("codpo-location-prompted", "1");
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         setPosition({ lat: coords.latitude, lng: coords.longitude, label: "Lokasi saya" });

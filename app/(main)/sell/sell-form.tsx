@@ -13,7 +13,6 @@ import { PriceStrike } from "@/components/price-strike";
 import { useAuth } from "@/components/providers/auth-provider";
 import { apiFetch } from "@/lib/client/api";
 import { CONDITION_LABELS } from "@/lib/listing";
-import { createClient } from "@/lib/supabase/client";
 import type { Category, Condition } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -72,7 +71,7 @@ export function SellForm({ categories }: { categories: Category[] }) {
     const accepted = selected.filter(
       (file) =>
         ["image/jpeg", "image/png", "image/webp"].includes(file.type) &&
-        file.size <= 5 * 1024 * 1024,
+        file.size <= 4 * 1024 * 1024,
     );
     const next = accepted.map((f) => {
       const url = URL.createObjectURL(f);
@@ -81,7 +80,7 @@ export function SellForm({ categories }: { categories: Category[] }) {
     });
     if (accepted.length !== selected.length || files.length > room) {
       setError(
-        `Sebagian foto dilewati. Gunakan JPG, PNG, atau WebP maksimal 5 MB; maksimal ${MAX_PHOTOS} foto.`,
+        `Sebagian foto dilewati. Gunakan JPG, PNG, atau WebP maksimal 4 MB; maksimal ${MAX_PHOTOS} foto.`,
       );
     } else {
       setError("");
@@ -156,43 +155,11 @@ export function SellForm({ categories }: { categories: Category[] }) {
         }),
       });
       createdId = created.id;
-      const supabase = createClient();
-      for (let index = 0; index < photos.length; index++) {
-        const photo = photos[index];
-        const signed = await apiFetch<{
-          key: string;
-          upload_url: string;
-          headers: Record<string, string>;
-        }>("/api/upload/presign", {
+      for (const photo of photos) {
+        await apiFetch<{ key: string }>("/api/upload/proxy", {
           method: "POST",
-          body: JSON.stringify({
-            kind: "listing",
-            mime: photo.file.type,
-            size: photo.file.size,
-            listing_id: created.id,
-          }),
+          body: (() => { const form = new FormData(); form.append("file", photo.file); form.append("listing_id", created.id); return form; })(),
         });
-        let upload: Response;
-        try {
-          upload = await fetch(signed.upload_url, {
-            method: "PUT",
-            headers: signed.headers,
-            body: photo.file,
-          });
-        } catch {
-          throw new Error(
-            "Upload foto diblokir browser (CORS R2). Admin perlu mengizinkan origin codpo.vercel.app di pengaturan R2.",
-          );
-        }
-        if (!upload.ok) throw new Error(`Upload foto ${index + 1} gagal`);
-        const { error: imageError } = await supabase
-          .from("listing_images")
-          .insert({
-            listing_id: created.id,
-            object_key: signed.key,
-            position: index,
-          });
-        if (imageError) throw imageError;
       }
       for (const photo of photos) {
         URL.revokeObjectURL(photo.url);
