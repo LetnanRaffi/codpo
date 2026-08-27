@@ -17,7 +17,7 @@ import type { Category, Condition } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const MAX_PHOTOS = 5;
-const MAX_UPLOAD_BYTES = 3.5 * 1024 * 1024;
+const MAX_PROXY_BYTES = 3.5 * 1024 * 1024;
 
 const BU_DURATIONS = [
   { value: "24h", label: "24 jam" },
@@ -33,7 +33,7 @@ function chip(active: boolean) {
 }
 
 async function compressForUpload(file: File): Promise<File> {
-  if (file.size <= MAX_UPLOAD_BYTES) return file;
+  if (file.size <= MAX_PROXY_BYTES) return file;
   const sourceUrl = URL.createObjectURL(file);
   try {
     const image = new Image();
@@ -41,23 +41,23 @@ async function compressForUpload(file: File): Promise<File> {
     image.src = sourceUrl;
     await image.decode();
     const longestSide = Math.max(image.naturalWidth, image.naturalHeight);
-    const scale = Math.min(1, 2000 / Math.max(longestSide, 1));
+    let scale = Math.min(1, 2000 / Math.max(longestSide, 1));
     const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
     const context = canvas.getContext("2d");
     if (!context) return file;
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    for (const quality of [0.84, 0.72, 0.6, 0.48, 0.36]) {
-      const blob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob(resolve, "image/jpeg", quality),
-      );
-      if (blob && blob.size <= MAX_UPLOAD_BYTES) {
-        const baseName = file.name.replace(/\.[^.]+$/, "") || "foto";
-        return new File([blob], `${baseName}.jpg`, { type: "image/jpeg" });
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "foto";
+    for (const dimension of [2000, 1600, 1280, 1024, 800]) {
+      scale = Math.min(1, dimension / Math.max(longestSide, 1));
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      for (const quality of [0.84, 0.72, 0.6, 0.48, 0.36, 0.24]) {
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+        if (blob && blob.size <= MAX_PROXY_BYTES) return new File([blob], `${baseName}.jpg`, { type: "image/jpeg" });
       }
     }
-    return file;
+    throw new Error("Foto terlalu besar untuk diproses browser");
   } finally {
     URL.revokeObjectURL(sourceUrl);
   }
@@ -103,8 +103,7 @@ export function SellForm({ categories }: { categories: Category[] }) {
     const selected = Array.from(files).slice(0, room);
     const accepted = selected.filter(
       (file) =>
-        ["image/jpeg", "image/png", "image/webp"].includes(file.type) &&
-        file.size <= 4 * 1024 * 1024,
+        ["image/jpeg", "image/png", "image/webp"].includes(file.type),
     );
     const next = accepted.map((f) => {
       const url = URL.createObjectURL(f);
@@ -113,7 +112,7 @@ export function SellForm({ categories }: { categories: Category[] }) {
     });
     if (accepted.length !== selected.length || files.length > room) {
       setError(
-        `Sebagian foto dilewati. Gunakan JPG, PNG, atau WebP maksimal 4 MB; maksimal ${MAX_PHOTOS} foto.`,
+        `Sebagian foto dilewati. Gunakan JPG, PNG, atau WebP; maksimal ${MAX_PHOTOS} foto.`,
       );
     } else {
       setError("");

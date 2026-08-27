@@ -24,7 +24,6 @@ export async function POST(req: Request) {
     const listingId = String(form.get("listing_id") ?? "");
     if (!(file instanceof File) || !listingId) throw new ApiError(422, "file dan listing_id wajib");
     if (!EXT[file.type]) throw new ApiError(415, "format foto harus JPG, PNG, atau WebP");
-    if (file.size > 4 * 1024 * 1024) throw new ApiError(413, "ukuran foto maksimal 4 MB");
     const db = (await import("@/lib/server/user-client")).userClient(req);
     const [{ data: owned }, { count }] = await Promise.all([
       db.from("listings").select("id").eq("id", listingId).eq("seller_id", user.id).maybeSingle(),
