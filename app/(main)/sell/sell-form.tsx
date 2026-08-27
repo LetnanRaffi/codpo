@@ -172,11 +172,18 @@ export function SellForm({ categories }: { categories: Category[] }) {
             listing_id: created.id,
           }),
         });
-        const upload = await fetch(signed.upload_url, {
-          method: "PUT",
-          headers: signed.headers,
-          body: photo.file,
-        });
+        let upload: Response;
+        try {
+          upload = await fetch(signed.upload_url, {
+            method: "PUT",
+            headers: signed.headers,
+            body: photo.file,
+          });
+        } catch {
+          throw new Error(
+            "Upload foto diblokir browser (CORS R2). Admin perlu mengizinkan origin codpo.vercel.app di pengaturan R2.",
+          );
+        }
         if (!upload.ok) throw new Error(`Upload foto ${index + 1} gagal`);
         const { error: imageError } = await supabase
           .from("listing_images")
