@@ -5,17 +5,27 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/providers/auth-provider";
 
-const ITEMS = [
+const BUY_ITEMS = [
   { href: "/", label: "Home", icon: House },
   { href: "/search", label: "Cari", icon: Search },
   { href: "/sell", label: "Jual", icon: Plus, primary: true },
   { href: "/transactions", label: "Transaksi", icon: ReceiptText },
   { href: "/chat", label: "Chat", icon: MessageCircle },
 ] as const;
+const SELL_ITEMS = [
+  { href: "/seller/dashboard", label: "Dashboard", icon: House },
+  { href: "/sell", label: "Jual", icon: Plus, primary: true },
+  { href: "/chat", label: "Chat", icon: MessageCircle },
+  { href: "/transactions", label: "Transaksi", icon: ReceiptText },
+  { href: "/", label: "Beli", icon: Search },
+] as const;
 
 export function MobileBottomNav() {
   const pathname = usePathname();
+  const { profile } = useAuth();
+  const items = profile?.mode === "seller" ? SELL_ITEMS : BUY_ITEMS;
 
   return (
     <nav
@@ -23,7 +33,7 @@ export function MobileBottomNav() {
       className="fixed inset-x-0 bottom-0 z-50 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <div className="grid grid-cols-5">
-        {ITEMS.map(({ href, label, icon: Icon, ...item }) => {
+        {items.map(({ href, label, icon: Icon, ...item }) => {
           const active =
             href === "/" ? pathname === "/" : pathname.startsWith(href);
           const primary = "primary" in item && item.primary;

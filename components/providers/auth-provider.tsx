@@ -54,11 +54,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
         return;
       }
-      const { data, error: profileError } = await supabase
+      let { data, error: profileError } = await supabase
         .from("profiles")
         .select("id,name,avatar_key,mode,verified")
         .eq("id", nextUser.id)
         .maybeSingle();
+      if (!data && !profileError) {
+        const fallbackName = String(nextUser.user_metadata?.name ?? nextUser.email?.split("@")[0] ?? "Pengguna Baru").trim().slice(0, 80) || "Pengguna Baru";
+        const created = await supabase.from("profiles").upsert({ id: nextUser.id, name: fallbackName }, { onConflict: "id" }).select("id,name,avatar_key,mode,verified").maybeSingle();
+        data = created.data;
+        profileError = created.error;
+      }
       if (profileError || !data) {
         setProfile(null);
         setError(profileError?.message ?? "Profil akun tidak ditemukan");

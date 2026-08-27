@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 
 import { AccountMenu } from "@/components/layout/account-menu";
 import { LocationPicker } from "@/components/layout/location-picker";
+import { ModeSwitcher } from "@/components/layout/mode-switcher";
 import { useAuth } from "@/components/providers/auth-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,6 +93,7 @@ export function SiteHeader() {
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1 md:gap-1.5">
+          <ModeSwitcher />
           <LocationPicker />
           <nav
             aria-label="Pesan, favorit, transaksi"

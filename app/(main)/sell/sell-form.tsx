@@ -33,7 +33,7 @@ function chip(active: boolean) {
 
 export function SellForm({ categories }: { categories: Category[] }) {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading, setMode } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const objectUrlsRef = useRef(new Set<string>());
   const [photos, setPhotos] = useState<
@@ -222,6 +222,20 @@ export function SellForm({ categories }: { categories: Category[] }) {
 
   const buEffective =
     saleType === "BU" && Number(buPrice) > 0 ? Number(buPrice) : null;
+
+  if (!authLoading && user && profile?.mode !== "seller") {
+    return (
+      <div className="rounded-2xl border bg-card p-6 text-center shadow-sm">
+        <p className="font-display text-2xl font-bold uppercase">Aktifkan mode jual</p>
+        <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+          Kamu sedang berada di mode beli. Aktifkan mode jual dulu supaya dashboard, listing, dan request COD tidak tercampur.
+        </p>
+        <Button type="button" className="mt-5 rounded-full font-bold" onClick={() => void setMode("seller").then(() => router.refresh())}>
+          Mulai jual barang
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <form className="space-y-8" onSubmit={handleSubmit} noValidate={false}>
