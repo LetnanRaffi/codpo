@@ -156,10 +156,15 @@ export function SellForm({ categories }: { categories: Category[] }) {
       });
       createdId = created.id;
       for (const photo of photos) {
-        await apiFetch<{ key: string }>("/api/upload/proxy", {
-          method: "POST",
-          body: (() => { const form = new FormData(); form.append("file", photo.file); form.append("listing_id", created.id); return form; })(),
-        });
+        try {
+          await apiFetch<{ key: string }>("/api/upload/proxy", {
+            method: "POST",
+            body: (() => { const form = new FormData(); form.append("file", photo.file); form.append("listing_id", created.id); return form; })(),
+          });
+        } catch (cause) {
+          const reason = cause instanceof Error ? cause.message : "gagal upload";
+          throw new Error(`Foto ${photos.indexOf(photo) + 1} (${photo.name}) gagal: ${reason}`);
+        }
       }
       for (const photo of photos) {
         URL.revokeObjectURL(photo.url);

@@ -14,7 +14,12 @@ export async function POST(req: Request) {
   try {
     rateLimit(req, "upload-proxy", 30, 60 * 1000);
     const user = await requireUser(req);
-    const form = await req.formData();
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch {
+      throw new ApiError(413, "Upload terlalu besar untuk batas Vercel. Kompres foto sampai di bawah 4 MB.");
+    }
     const file = form.get("file");
     const listingId = String(form.get("listing_id") ?? "");
     if (!(file instanceof File) || !listingId) throw new ApiError(422, "file dan listing_id wajib");
@@ -35,7 +40,10 @@ export async function POST(req: Request) {
       throw new ApiError(502, "R2 menolak upload. Periksa R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, bucket, dan izin PutObject di Vercel.");
     }
     const { error } = await db.from("listing_images").insert({ listing_id: listingId, object_key: key, position: count ?? 0 });
-    if (error) throw error;
+    if (error) {
+      console.error("[upload-proxy:database]", error);
+      throw new ApiError(502, `Foto tersimpan di R2, tetapi metadata gagal disimpan (${error.code ?? "database"}). Coba ulang.`);
+    }
     return ok({ key });
   } catch (e) { return handleError(e); }
 }
