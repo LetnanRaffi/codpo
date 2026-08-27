@@ -2,7 +2,6 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { ApiError, handleError, ok } from "@/lib/server/api";
 import { requireUser } from "@/lib/server/auth";
 import { rateLimit } from "@/lib/server/ratelimit";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { r2 } from "@/lib/r2";
 
 export const runtime = "nodejs";
@@ -29,9 +28,13 @@ export async function POST(req: Request) {
     if (!owned) throw new ApiError(403, "bukan listing milikmu");
     if ((count ?? 0) >= 10) throw new ApiError(409, "maksimal 10 gambar per listing");
     const key = `listings/${listingId}/${crypto.randomUUID()}.${EXT[file.type]}`;
-    await r2.send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET!, Key: key, ContentType: file.type, Body: Buffer.from(await file.arrayBuffer()) }));
-    const admin = createAdminClient();
-    const { error } = await admin.from("listing_images").insert({ listing_id: listingId, object_key: key, position: count ?? 0 });
+    try {
+      await r2.send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET!, Key: key, ContentType: file.type, Body: Buffer.from(await file.arrayBuffer()) }));
+    } catch (cause) {
+      console.error("[upload-proxy:r2]", cause);
+      throw new ApiError(502, "R2 menolak upload. Periksa R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, bucket, dan izin PutObject di Vercel.");
+    }
+    const { error } = await db.from("listing_images").insert({ listing_id: listingId, object_key: key, position: count ?? 0 });
     if (error) throw error;
     return ok({ key });
   } catch (e) { return handleError(e); }
