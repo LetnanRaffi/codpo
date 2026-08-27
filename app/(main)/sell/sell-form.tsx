@@ -17,6 +17,7 @@ import type { Category, Condition } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const MAX_PHOTOS = 5;
+const MAX_UPLOAD_BYTES = 3.5 * 1024 * 1024;
 
 const BU_DURATIONS = [
   { value: "24h", label: "24 jam" },
@@ -29,6 +30,37 @@ function chip(active: boolean) {
     "rounded-full border px-3.5 py-1.5 text-xs transition-colors",
     active ? "border-foreground bg-secondary font-semibold" : "hover:bg-accent",
   );
+}
+
+async function compressForUpload(file: File): Promise<File> {
+  if (file.size <= MAX_UPLOAD_BYTES) return file;
+  const sourceUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.decoding = "async";
+    image.src = sourceUrl;
+    await image.decode();
+    const longestSide = Math.max(image.naturalWidth, image.naturalHeight);
+    const scale = Math.min(1, 2000 / Math.max(longestSide, 1));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    for (const quality of [0.84, 0.72, 0.6, 0.48, 0.36]) {
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", quality),
+      );
+      if (blob && blob.size <= MAX_UPLOAD_BYTES) {
+        const baseName = file.name.replace(/\.[^.]+$/, "") || "foto";
+        return new File([blob], `${baseName}.jpg`, { type: "image/jpeg" });
+      }
+    }
+    return file;
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
 }
 
 export function SellForm({ categories }: { categories: Category[] }) {
@@ -52,6 +84,7 @@ export function SellForm({ categories }: { categories: Category[] }) {
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [pending, setPending] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState("");
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(
     null,
   );
@@ -156,10 +189,13 @@ export function SellForm({ categories }: { categories: Category[] }) {
       });
       createdId = created.id;
       for (const photo of photos) {
+        setUploadingPhoto(`Mengompres ${photo.name}…`);
+        const uploadFile = await compressForUpload(photo.file);
+        setUploadingPhoto(`Mengunggah ${photo.name}…`);
         try {
           await apiFetch<{ key: string }>("/api/upload/proxy", {
             method: "POST",
-            body: (() => { const form = new FormData(); form.append("file", photo.file); form.append("listing_id", created.id); return form; })(),
+            body: (() => { const form = new FormData(); form.append("file", uploadFile, uploadFile.name); form.append("listing_id", created.id); return form; })(),
           });
         } catch (cause) {
           const reason = cause instanceof Error ? cause.message : "gagal upload";
@@ -185,6 +221,7 @@ export function SellForm({ categories }: { categories: Category[] }) {
         cause instanceof Error ? cause.message : "Gagal memasang listing",
       );
     } finally {
+      setUploadingPhoto("");
       setPending(false);
     }
   }
@@ -533,7 +570,7 @@ export function SellForm({ categories }: { categories: Category[] }) {
           className="w-full rounded-full font-bold"
         >
           {pending
-            ? "Menyimpan & mengunggah…"
+            ? uploadingPhoto || "Menyimpan & mengunggah…"
             : `Pasang Listing${saleType === "BU" ? " 🔥 BU" : ""}`}
           {Number(price) > 0 &&
             ` · Rp${(saleType === "BU" && Number(buPrice) ? Number(buPrice) : Number(price)).toLocaleString("id-ID")}`}
